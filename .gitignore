@@ -6,3 +6,5 @@ dist/
 *.err
 *storybook.log
 storybook-static
+AGENTS.md
+frontend/start.bat
