@@ -8,3 +8,11 @@ dist/
 storybook-static
 AGENTS.md
 frontend/start.bat
+__pycache__/
+*.pyc
+.pytest_cache/
+test.db
+.env
+*.egg-info/
+dist/
+build/

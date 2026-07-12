@@ -1,0 +1,70 @@
+{
+  "id": "rag_2024",
+  "label": "Retrieval Augmented Generation (2024)",
+  "paper_count": 3,
+  "edge_count": 2,
+  "papers": [
+    {
+      "arxiv_id": "2401.12345",
+      "title": "RAG vs Long Context: A Comparison",
+      "authors": ["Alice Smith", "Bob Jones"],
+      "publish_date": "2024-01-15",
+      "abstract": "We compare retrieval augmented generation with long context approaches on multiple benchmarks.",
+      "url": "https://arxiv.org/abs/2401.12345",
+      "citation_count": 42,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2312.09876",
+      "title": "Long Context Transformers Outperform RAG",
+      "authors": ["Charlie Brown"],
+      "publish_date": "2023-12-20",
+      "abstract": "Our experiments show that long context transformers consistently outperform RAG pipelines.",
+      "url": "https://arxiv.org/abs/2312.09876",
+      "citation_count": 31,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2403.55210",
+      "title": "Hybrid RAG: Best of Both Worlds",
+      "authors": ["Diana Prince", "Eve Wilson"],
+      "publish_date": "2024-03-10",
+      "abstract": "We propose a hybrid approach combining RAG with long context for improved accuracy.",
+      "url": "https://arxiv.org/abs/2403.55210",
+      "citation_count": 18,
+      "source": "arxiv"
+    }
+  ],
+  "edges": [
+    {
+      "source": "2401.12345",
+      "target": "2312.09876",
+      "type": "CONTRADICTS",
+      "properties": {
+        "on_dimension": "retrieval_accuracy",
+        "confidence": 0.91,
+        "evidence_quote": "Our results show retrieval accuracy drops 18% under long-context conditions.",
+        "timestamp": "2024-06-01T00:00:00Z"
+      }
+    },
+    {
+      "source": "2403.55210",
+      "target": "2401.12345",
+      "type": "EXTENDS",
+      "properties": {
+        "method": "hybrid_architecture",
+        "improvement": 12.5,
+        "evidence_quote": "Our hybrid approach improves upon RAG by 12.5% on the same benchmark.",
+        "confidence": 0.85
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "gap_type": "unresolved_contradiction",
+      "description": "Papers 2401.12345 and 2312.09876 contradict each other on retrieval accuracy under long context, but no subsequent paper has reconciled this finding.",
+      "affected_nodes": ["2401.12345", "2312.09876"],
+      "severity": 0.84
+    }
+  ]
+}
