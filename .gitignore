@@ -1,1 +1,8 @@
 context/
+
+node_modules/
+dist/
+*.log
+*.err
+*storybook.log
+storybook-static

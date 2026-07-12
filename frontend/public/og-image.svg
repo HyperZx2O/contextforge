@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" fill="none">
+  <rect width="1200" height="630" fill="#010102" />
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="#0e0f11" stroke="#23252a" />
+  <!-- brand mark, scaled up -->
+  <g transform="translate(96 250) scale(10)">
+    <line x1="12" y1="12" x2="5" y2="6" stroke="#f7f8f8" stroke-width="1.5" stroke-linecap="round" />
+    <line x1="12" y1="12" x2="19" y2="7" stroke="#f7f8f8" stroke-width="1.5" stroke-linecap="round" />
+    <line x1="12" y1="12" x2="7" y2="19" stroke="#5e6ad2" stroke-width="1.5" stroke-linecap="round" />
+    <circle cx="5" cy="6" r="2.4" fill="#f7f8f8" />
+    <circle cx="19" cy="7" r="2.4" fill="#f7f8f8" />
+    <circle cx="12" cy="12" r="3.1" fill="#5e6ad2" />
+    <circle cx="7" cy="19" r="2.4" fill="#f7f8f8" />
+  </g>
+  <text x="360" y="306" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="600" letter-spacing="-2" fill="#f7f8f8">ContextForge</text>
+  <text x="362" y="362" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="400" letter-spacing="1" fill="#8a8f98">Research intelligence, mapped</text>
+</svg>
