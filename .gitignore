@@ -6,3 +6,5 @@ test.db
 *.egg-info/
 dist/
 build/
+AGENTS.md
+context/
