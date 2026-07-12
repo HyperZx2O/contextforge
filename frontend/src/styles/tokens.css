@@ -1,0 +1,96 @@
+/* ============================================================
+   ContextForge design tokens — SHARED across landing + app.
+   Mirrors context/design.md verbatim. Imported globally in
+   main.jsx so both pages resolve var(--...) from one source
+   (no per-stylesheet palette drift).
+   ============================================================ */
+
+:root {
+  /* Surface ladder */
+  --canvas: #010102;
+  --surface-0: #0c0c0e;   /* inset / code surfaces */
+  --surface-1: #0e0f11;
+  --surface-2: #16181d;
+  --surface-3: #1d2026;
+  --surface-4: #25282f;
+
+  /* Hairlines */
+  --hairline: #23252a;
+  --hairline-strong: #2e3138;
+  --hairline-tertiary: #3a3e47;
+
+  /* Brand / accent (lavender — used sparingly) */
+  --primary: #5e6ad2;
+  --primary-hover: #828fff;
+  --primary-focus: #5e69d1;
+  --success: #27a644;
+
+  /* Text */
+  --ink: #f7f8f8;
+  --ink-muted: #d0d6e0;
+  --ink-subtle: #8a8f98;
+  --ink-tertiary: #7a7f87;   /* bumped from #62666d for >=4.5:1 contrast on --canvas */
+
+  /* Danger / error */
+  --danger-bg: #2a1416;
+  --danger-border: #5e2a2e;
+  --danger-text: #ff9d9d;
+
+  /* Spacing (4px base) */
+  --s-xxs: 4px;
+  --s-xs: 8px;
+  --s-sm: 12px;
+  --s-md: 16px;
+  --s-lg: 24px;
+  --s-xl: 32px;
+  --s-xxl: 48px;
+  --s-section: 96px;
+
+  /* Radius */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-xxl: 24px;
+  --r-pill: 9999px;
+
+  /* Type */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale — SHARED so landing + app resolve every --fs-* from one source.
+     Brand exposes a fluid clamp() display ramp (>=1.25 ratio between major
+     steps); product leans on the fixed rem body/secondary steps. Overlapping
+     aliases (xs/sm/md/lg) point at the semantic token so there is a single
+     source of truth. */
+  --fs-display-xl: clamp(2.75rem, 5.5vw + 1.5rem, 5rem);        /* 44 -> 80 */
+  --fs-display-lg: clamp(2.25rem, 3.8vw + 1.25rem, 3.5rem);     /* 36 -> 56 */
+  --fs-display-md: clamp(1.75rem, 2.4vw + 1rem, 2.5rem);        /* 28 -> 40 */
+  --fs-headline:   clamp(1.375rem, 1.4vw + 0.75rem, 1.75rem);   /* 22 -> 28 */
+  --fs-card-title: clamp(1.125rem, 0.6vw + 0.875rem, 1.375rem); /* 18 -> 22 */
+  --fs-body-lg:    clamp(1rem, 0.3vw + 0.875rem, 1.125rem);     /* 16 -> 18 */
+  --fs-body:       1rem;       /* 16px */
+  --fs-body-sm:    0.875rem;   /* 14px */
+  --fs-eyebrow:    0.8125rem;  /* 13px */
+  --fs-caption:    0.75rem;    /* 12px */
+  --fs-lg:         var(--fs-body-lg);
+  --fs-md:         var(--fs-body);
+  --fs-sm:         var(--fs-body-sm);
+  --fs-xs:         var(--fs-caption);
+
+  /* Motion easings */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Shadows — depth ladder (dark surfaces: tinted neutrals, no colour glow) */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+
+  /* Gradients */
+  --gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
+  --gradient-accent: linear-gradient(135deg, #5e6ad2 0%, #828fff 100%);
+
+}

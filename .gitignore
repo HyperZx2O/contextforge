@@ -14,4 +14,13 @@ venv/
 node_modules/
 .opencode/
 context/
+
+node_modules/
+dist/
+*.log
+*.err
+*storybook.log
+storybook-static
+AGENTS.md
+frontend/start.bat
 AGENTS.md
