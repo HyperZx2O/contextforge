@@ -1,3 +1,18 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+test.db
+*.pyo
+.pytest_cache/
+.env
+*.egg-info/
+dist/
+build/
+AGENTS.md
+.venv/
+venv/
+node_modules/
+.opencode/
 context/
 
 node_modules/
@@ -8,3 +23,4 @@ dist/
 storybook-static
 AGENTS.md
 frontend/start.bat
+AGENTS.md
