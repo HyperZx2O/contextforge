@@ -1,11 +1,14 @@
 __pycache__/
 *.pyc
+.pytest_cache/
+test.db
 *.pyo
 .pytest_cache/
 .env
 *.egg-info/
 dist/
 build/
+AGENTS.md
 .venv/
 venv/
 node_modules/
