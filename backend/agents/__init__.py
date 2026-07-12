@@ -27,3 +27,27 @@ async def call_llm(system_prompt: str, user_prompt: str) -> dict:
 
 async def call_llm_answer(question: str, results: str) -> str:
     return f"Based on the graph data: {results[:200]}"
+"""Shared exception types for the agent pipeline.
+
+Classes:
+    PipelineAgentError: Base exception for all agent failures.
+    LLMUnavailableError: Both LLM providers (Groq, OpenRouter) failed.
+    DatabaseError: Neo4j or PostgreSQL operation failed.
+    ExternalAPIError: Third-party API (arXiv, Semantic Scholar, GitHub, NewsAPI) failed.
+"""
+
+
+class PipelineAgentError(Exception):
+    pass
+
+
+class LLMUnavailableError(PipelineAgentError):
+    pass
+
+
+class DatabaseError(PipelineAgentError):
+    pass
+
+
+class ExternalAPIError(PipelineAgentError):
+    pass
