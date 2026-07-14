@@ -1,12 +1,14 @@
+"""Shared FastAPI dependencies — delegates to db/ modules for single-source-of-truth."""
+
 from collections.abc import AsyncGenerator
 
-from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession as Neo4jSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from api.models import Base
 from config import settings
+from db.models import Base
 
 _engine = create_async_engine(settings.DATABASE_URL)
 _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
@@ -19,12 +21,14 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
 
 
-_neo4j_driver: AsyncDriver | None = None
-
-
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with _session_factory() as session:
         yield session
+
+
+# ── Neo4j (single driver shared across app + agents) ────────────────────────
+
+_neo4j_driver: AsyncDriver | None = None
 
 
 def get_neo4j_driver() -> AsyncDriver:
@@ -36,7 +40,7 @@ def get_neo4j_driver() -> AsyncDriver:
     return _neo4j_driver
 
 
-async def get_neo4j() -> AsyncGenerator:
+async def get_neo4j() -> AsyncGenerator[Neo4jSession, None]:
     driver = get_neo4j_driver()
     session = driver.session()
     try:

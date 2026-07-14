@@ -3,15 +3,13 @@
 import asyncio
 
 from db.models import Base, PapersCache, PipelineJobs
-from db.postgres_client import _get_engine, _get_session_maker
 
 
 async def seed():
-    engine = _get_engine()
+    from dependencies import _engine as engine, _session_factory as session_factory
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    session_factory = _get_session_maker()
     async with session_factory() as session:
         papers = [
             PapersCache(

@@ -18,6 +18,8 @@ const useGraphStore = create((set) => ({
   selectedEdge: null,
   activeFilters: [],
   hoveredNode: null,
+  searchQuery: '',
+  viewMode: 'graph',
 
   // Pipeline state
   jobId: null,
@@ -42,6 +44,8 @@ const useGraphStore = create((set) => ({
   selectNode: (id) => set({ selectedNode: id, selectedEdge: null }),
   selectEdge: (edge) => set({ selectedEdge: edge, selectedNode: null }),
   clearSelection: () => set({ selectedNode: null, selectedEdge: null }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setViewMode: (mode) => set({ viewMode: mode }),
   toggleFilter: (type) =>
     set((s) => ({
       activeFilters: s.activeFilters.includes(type)

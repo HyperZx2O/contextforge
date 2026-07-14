@@ -4,7 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import dependencies
-from api.models import Base
+from db.models import Base
 from dependencies import get_db, get_neo4j
 from main import app
 

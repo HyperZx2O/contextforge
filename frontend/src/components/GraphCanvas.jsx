@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import useGraphStore from '../store/graphStore.js';
 import { nodeColor, linkColor } from '../constants/colors.js';
 import NodeTooltip from './NodeTooltip.jsx';
 import Skeleton from './Skeleton.jsx';
 
-// react-force-graph canvas (spec §10.2). Colored nodes/edges, hover tooltip,
-// click selection, and relationship-type filtering via the Zustand store.
+// react-force-graph canvas. Colored nodes/edges, hover tooltip,
+// click selection, and relationship-type filtering.
 export default function GraphCanvas() {
   const { nodes, edges, activeFilters, loading, selectNode, selectEdge, setHoveredNode, graphError } =
     useGraphStore();
@@ -15,8 +15,6 @@ export default function GraphCanvas() {
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
 
-  // Fill the container; re-measure on resize. Falls back to a default when
-  // layout reports zero (e.g. during tests).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -74,11 +72,36 @@ export default function GraphCanvas() {
   );
 }
 
-// Extracted so the canvas only mounts when there is data to show; the
-// surrounding container (and its testid) stays mounted in every state.
+// Extracted so the canvas only mounts when there is data to show.
 function GraphInner({ nodes, edges, activeFilters, selectNode, selectEdge, setHoveredNode, size, pointer }) {
   const visibleEdges = edges.filter((e) => !activeFilters.includes(e.type));
   const graphData = { nodes, links: visibleEdges };
+
+  const linkLineDash = (edge) => {
+    return edge.type === 'INVOLVES' ? [4, 4] : undefined;
+  };
+
+  // Node radius: sqrt of citations for visual hierarchy, min 3
+  const nodeVal = useCallback((node) => {
+    const citations = node.properties?.citation_count || 1;
+    return Math.max(3, Math.sqrt(citations) * 0.4);
+  }, []);
+
+  // Edge width: proportional to confidence (1-4px range)
+  const linkWidth = useCallback((edge) => {
+    const conf = edge.properties?.confidence ?? 0.5;
+    return 1 + conf * 3;
+  }, []);
+
+  // Configure D3 forces for better spacing
+  const d3Force = useCallback((force) => {
+    // Access and configure the link force - increase distance between connected nodes
+    force.force('link').distance(200);
+    // Access and configure the charge force - stronger repulsion
+    force.force('charge').strength(-600);
+    // Access and configure collision force - prevent node overlap
+    force.force('collision').radius(30);
+  }, []);
 
   return (
     <>
@@ -86,11 +109,15 @@ function GraphInner({ nodes, edges, activeFilters, selectNode, selectEdge, setHo
         graphData={graphData}
         width={size.width}
         height={size.height}
+        nodeVal={nodeVal}
         nodeLabel={(node) => node.properties?.title || node.properties?.name || node.id}
         nodeColor={(node) => nodeColor(node)}
         linkColor={(edge) => linkColor(edge)}
+        linkWidth={linkWidth}
+        linkLineDash={linkLineDash}
         linkDirectionalArrowLength={4}
         linkDirectionalArrowRelPos={1}
+        d3Force={d3Force}
         onNodeClick={(node) => selectNode(node.id)}
         onLinkClick={(edge) =>
           selectEdge({
@@ -100,9 +127,9 @@ function GraphInner({ nodes, edges, activeFilters, selectNode, selectEdge, setHo
           })
         }
         onNodeHover={(node) => setHoveredNode(node?.id ?? null)}
-        cooldownTicks={100}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
+        cooldownTicks={200}
+        d3AlphaDecay={0.01}
+        d3VelocityDecay={0.2}
       />
       <NodeTooltip style={{ left: pointer.x, top: pointer.y }} />
     </>

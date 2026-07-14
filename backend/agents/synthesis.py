@@ -24,7 +24,7 @@ import numpy as np
 from sqlalchemy import func, select, update
 
 from agents import DatabaseError, PipelineAgentError
-from api.schemas import RelationshipResult
+from api.schemas import LLMRelationshipResponse as RelationshipResult
 from db.models import EntitiesCache, PapersCache, PipelineJobs, SynthesisCache
 from db.postgres_client import _get_session_maker
 from db.neo4j_client import execute_query
@@ -213,14 +213,16 @@ async def _process_pair(
     if not raw_response:
         return 0
 
+    import json as _json
     async with session_factory() as session:
+        llm_resp_str = _json.dumps(raw_response.model_dump()) if not isinstance(raw_response.model_dump(), str) else raw_response.model_dump()
         await session.execute(
             SynthesisCache.__table__.insert().values(
-                id=uuid.uuid4(),
-                paper_a_id=uuid.UUID(pid_a),
-                paper_b_id=uuid.UUID(pid_b),
+                id=str(uuid.uuid4()),
+                paper_a_id=pid_a,
+                paper_b_id=pid_b,
                 cache_key=ck,
-                llm_response=raw_response.model_dump(),
+                llm_response=llm_resp_str,
                 confidence=raw_response.confidence,
                 relationship_type=raw_response.relationship_type,
                 created_at=datetime.now(timezone.utc),
@@ -287,7 +289,7 @@ async def _set_job_failed(job_id: str, error_message: str):
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="failed", error_message=error_message)
         )
         await session.commit()
@@ -300,7 +302,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="synthesizing")
         )
         await session.commit()
@@ -310,7 +312,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
                 EntitiesCache.paper_id,
                 EntitiesCache.embedding,
             ).where(
-                EntitiesCache.paper_id.in_([uuid.UUID(pid) for pid in paper_ids]),
+                EntitiesCache.paper_id.in_(paper_ids),
                 EntitiesCache.embedding.isnot(None),
             )
         )
@@ -322,7 +324,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
         if len(emb_map) < 2:
             await session.execute(
                 update(PipelineJobs)
-                .where(PipelineJobs.id == uuid.UUID(job_id))
+                .where(PipelineJobs.id == job_id)
                 .values(status="done", relationships_created=0)
             )
             await session.commit()
@@ -340,7 +342,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
 
         paper_result = await session.execute(
             select(PapersCache).where(
-                PapersCache.id.in_([uuid.UUID(pid) for pid in paper_ids_with_emb])
+                PapersCache.id.in_(paper_ids_with_emb)
             )
         )
         papers = {str(p.id): p for p in paper_result.scalars().all()}
@@ -365,7 +367,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="done", relationships_created=rel_count)
         )
         await session.commit()

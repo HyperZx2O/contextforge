@@ -62,13 +62,13 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
 
         async with session_factory() as session:
             await session.execute(
-                update(PipelineJobs).where(PipelineJobs.id == uuid.UUID(job_id)).values(status="extracting")
+                update(PipelineJobs).where(PipelineJobs.id == job_id).values(status="extracting")
             )
             await session.commit()
 
             for paper_id in paper_ids:
                 result = await session.execute(
-                    select(PapersCache).where(PapersCache.id == uuid.UUID(paper_id))
+                    select(PapersCache).where(PapersCache.id == paper_id)
                 )
                 paper = result.scalar_one_or_none()
                 if not paper or not paper.abstract:
@@ -76,7 +76,7 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
 
                 await session.execute(
                     update(PipelineJobs)
-                    .where(PipelineJobs.id == uuid.UUID(job_id))
+                    .where(PipelineJobs.id == job_id)
                     .values(status="extracting")
                 )
                 await session.commit()
@@ -108,11 +108,19 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
                     )
                     existing_entities = existing_result.scalars().all()
 
+                    import json as _json
                     existing_embs = []
                     existing_ids: list[str] = []
                     for ex in existing_entities:
                         if ex.embedding is not None:
-                            existing_embs.append(ex.embedding)
+                            # Handle SQLite text storage vs pgvector
+                            emb = ex.embedding
+                            if isinstance(emb, str):
+                                try:
+                                    emb = _json.loads(emb)
+                                except (ValueError, TypeError):
+                                    continue
+                            existing_embs.append(emb)
                             existing_ids.append(str(ex.id))
 
                     dup_idx = find_duplicate(new_emb, existing_embs, 0.85)
@@ -127,15 +135,18 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
                         await session.commit()
                         continue
 
-                    entity_id = uuid.uuid4()
+                    entity_id = str(uuid.uuid4())
+                    import json as _json
+                    props = {"papers_count": 1}
+                    props_str = _json.dumps(props) if not isinstance(props, str) else props
                     await session.execute(
                         EntitiesCache.__table__.insert().values(
                             id=entity_id,
-                            paper_id=uuid.UUID(paper_id),
+                            paper_id=paper_id,
                             entity_type=entity["entity_type"],
                             name=entity["name"],
-                            properties={"papers_count": 1},
-                            embedding=new_emb,
+                            properties=props_str,
+                            embedding=None,
                             created_at=datetime.now(timezone.utc),
                         )
                     )
@@ -144,7 +155,7 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
 
             await session.execute(
                 update(PipelineJobs)
-                .where(PipelineJobs.id == uuid.UUID(job_id))
+                .where(PipelineJobs.id == job_id)
                 .values(papers_processed=len(paper_ids))
             )
             await session.commit()

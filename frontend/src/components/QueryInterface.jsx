@@ -4,9 +4,16 @@ import { EDGE_COLORS } from '../constants/colors.js';
 import { useQuery } from '../hooks/useQuery.js';
 import { titleOf } from '../utils/nodes.js';
 
-// Natural-language query box. Typed question goes to the store-backed input;
-// the answer (with supporting edges) renders in a card. Minimal error banner
-// covers failures until Phase 9 adds the full error UX.
+const SUGGESTED_QUERIES = [
+  'Which papers contradict each other?',
+  'What are the research gaps?',
+  'Which paper has the most citations?',
+  'What methods are most commonly used?',
+  'Which papers extend or build on each other?',
+  'What are the key claims in this field?',
+];
+
+// Natural-language query box with suggested queries.
 export default function QueryInterface() {
   const queryInput = useGraphStore((s) => s.queryInput);
   const queryResult = useGraphStore((s) => s.queryResult);
@@ -17,6 +24,11 @@ export default function QueryInterface() {
   const clearQuery = useGraphStore((s) => s.clearQuery);
   const { submitQuery } = useQuery();
   const [open, setOpen] = useState(true);
+
+  const handleSuggestion = (q) => {
+    setQueryInput(q);
+    submitQuery(q);
+  };
 
   return (
     <div className="query-interface" data-testid="query-interface">
@@ -35,6 +47,19 @@ export default function QueryInterface() {
 
       {open && (
         <>
+          <div className="query-suggestions" data-testid="query-suggestions">
+            {SUGGESTED_QUERIES.map((q) => (
+              <button
+                key={q}
+                className="query-suggestion"
+                onClick={() => handleSuggestion(q)}
+                disabled={queryLoading}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+
           <textarea
             data-testid="query-input"
             placeholder="Ask a question about the literature…"

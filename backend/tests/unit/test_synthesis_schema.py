@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from api.schemas import RelationshipResult
+from api.schemas import LLMRelationshipResponse as RelationshipResult
 
 
 def test_relationship_result_accepts_valid():

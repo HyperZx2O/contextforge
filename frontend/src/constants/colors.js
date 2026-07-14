@@ -19,6 +19,7 @@ export const EDGE_COLORS = {
   CITES: '#95A5A6',
   IMPLEMENTS: '#1ABC9C',
   DISAGREES_ON_SCOPE: '#8E44AD',
+  INVOLVES: '#FF6B6B',  // Gap connection - matches Gap node color
 };
 
 // Gap-type badge colors (plan.md Phase 7). Unknown types fall back to gray.

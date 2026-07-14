@@ -103,7 +103,7 @@ async def load_demo(
                 f"r.{k} = ${k}" for k in props.keys()
             ]
             set_clause = ", ".join(props_list)
-            set_clause = f", {set_clause}" if set_clause else ""
+            set_clause = f" SET {set_clause}" if set_clause else ""
             cypher = (
                 f"MATCH (a:Paper {{arxiv_id: $source}}) "
                 f"MATCH (b:Paper {{arxiv_id: $target}}) "

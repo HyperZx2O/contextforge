@@ -90,6 +90,8 @@ async def _fetch_arxiv(client: httpx.AsyncClient, query: str, year_from: int, ye
 # ── Semantic Scholar ─────────────────────────────────────────────────────────
 
 async def _enrich_semantic_scholar(client: httpx.AsyncClient, papers: list[dict]) -> list[dict]:
+    import re as _re
+    import asyncio
     s = _settings()
     if not s.SEMANTIC_SCHOLAR_API_KEY:
         return papers
@@ -101,22 +103,31 @@ async def _enrich_semantic_scholar(client: httpx.AsyncClient, papers: list[dict]
         if not arxiv_id:
             enriched.append(paper)
             continue
+        # Strip version suffix (e.g. "2002.00741v1" → "2002.00741")
+        clean_id = _re.sub(r"v\d+$", "", arxiv_id)
         try:
             resp = await client.get(
-                f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{arxiv_id}",
+                f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{clean_id}",
                 params={"fields": "citationCount,authors,externalIds"},
                 headers=headers,
                 timeout=15,
             )
             if resp.status_code == 429:
-                logger.warning("Semantic Scholar 429 for %s, skipping enrichment", arxiv_id)
-                enriched.append(paper)
-                continue
-            resp.raise_for_status()
-            data = resp.json()
-            paper["citation_count"] = data.get("citationCount", 0)
+                logger.warning("Semantic Scholar 429 for %s, waiting 1s", clean_id)
+                await asyncio.sleep(1)
+                resp = await client.get(
+                    f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{clean_id}",
+                    params={"fields": "citationCount,authors,externalIds"},
+                    headers=headers,
+                    timeout=15,
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                paper["citation_count"] = data.get("citationCount", 0) or paper.get("citation_count", 0)
+            else:
+                logger.warning("Semantic Scholar %d for %s", resp.status_code, clean_id)
         except Exception as exc:
-            logger.warning("Semantic Scholar error for %s: %s", arxiv_id, exc)
+            logger.warning("Semantic Scholar error for %s: %s", clean_id, exc)
         enriched.append(paper)
     return enriched
 
@@ -212,6 +223,7 @@ async def _fetch_newsapi(client: httpx.AsyncClient, query: str, year_from: int) 
 # ── DB Write ─────────────────────────────────────────────────────────────────
 
 async def _write_papers(papers: list[dict]) -> list[str]:
+    import json as _json
     from db.models import PapersCache
     from db.postgres_client import _get_session_maker
     from sqlalchemy import select
@@ -241,12 +253,16 @@ async def _write_papers(papers: list[dict]) -> list[str]:
                 except (ValueError, TypeError):
                     pass
 
+            authors = paper.get("authors")
+            if authors and not isinstance(authors, str):
+                authors = _json.dumps(authors)
+
             new_paper = PapersCache(
                 arxiv_id=arxiv_id,
                 doi=paper.get("doi"),
                 title=title,
                 abstract=paper.get("abstract", ""),
-                authors=paper.get("authors"),
+                authors=authors,
                 publish_date=pub_date,
                 citation_count=paper.get("citation_count", 0),
                 source=paper.get("source", "unknown"),
@@ -257,6 +273,49 @@ async def _write_papers(papers: list[dict]) -> list[str]:
             ids.append(str(new_paper.id))
         await session.commit()
     return ids
+
+
+async def _write_papers_to_neo4j(papers: list[dict]):
+    """Write ingested papers to Neo4j as Paper nodes (MERGE to avoid duplicates)."""
+    try:
+        from db.neo4j_client import execute_query
+    except Exception as exc:
+        logger.warning("Neo4j not available, skipping Neo4j write: %s", exc)
+        return
+
+    for paper in papers:
+        arxiv_id = paper.get("arxiv_id")
+        if not arxiv_id:
+            continue
+        try:
+            authors = paper.get("authors", [])
+            if isinstance(authors, list):
+                author_names = [a.get("name", "") if isinstance(a, dict) else str(a) for a in authors]
+            else:
+                author_names = []
+
+            await execute_query(
+                "MERGE (p:Paper {arxiv_id: $arxiv_id}) "
+                "SET p.title = $title, "
+                "    p.abstract = $abstract, "
+                "    p.authors = $authors, "
+                "    p.publish_date = date($publish_date), "
+                "    p.citation_count = $citation_count, "
+                "    p.source = $source, "
+                "    p.url = $url",
+                {
+                    "arxiv_id": arxiv_id,
+                    "title": paper.get("title", ""),
+                    "abstract": paper.get("abstract", ""),
+                    "authors": author_names,
+                    "publish_date": paper.get("publish_date") or "2024-01-01",
+                    "citation_count": paper.get("citation_count", 0),
+                    "source": paper.get("source", "unknown"),
+                    "url": paper.get("url", ""),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Failed to write paper %s to Neo4j: %s", arxiv_id, exc)
 
 
 async def _update_job(job_id: str, status: str, papers_found: int):
@@ -319,7 +378,7 @@ async def run_ingestion(job_id: str, query: str, year_from: int, year_to: int,
         await _update_job(job_id, "ingesting", 0)
 
         all_papers = []
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             if "arxiv" in sources:
                 arxiv_papers = await _fetch_arxiv(client, query, year_from, year_to, max_papers)
                 arxiv_papers = await _enrich_semantic_scholar(client, arxiv_papers)
@@ -335,6 +394,10 @@ async def run_ingestion(job_id: str, query: str, year_from: int, year_to: int,
 
         all_papers = all_papers[:max_papers]
         paper_ids = await _write_papers(all_papers)
+
+        # Write papers to Neo4j so synthesis can create edges
+        await _write_papers_to_neo4j(all_papers)
+
         await _update_job(job_id, "ingesting", len(paper_ids))
 
         logger.info("ingestion complete job_id=%s papers=%d", job_id, len(paper_ids))

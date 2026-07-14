@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import run_extraction, run_gap_finder, run_ingestion, run_synthesis
 from api.deps import require_api_key
-from api.models import PipelineJob
+from db.models import PipelineJob
 from api.schemas import PipelineRunRequest, PipelineRunResponse, PipelineStatusResponse
 from config import settings
 from dependencies import get_db, limiter
@@ -25,8 +25,8 @@ async def _update_job(db: AsyncSession, job_id: str, **kwargs):
 
 
 async def run_pipeline_background(job_id: str, req: PipelineRunRequest):
-    import dependencies as deps
-    async with deps._session_factory() as db:
+    from dependencies import _session_factory
+    async with _session_factory() as db:
         try:
             await _update_job(db, job_id, status="ingesting")
             paper_ids = await run_ingestion(

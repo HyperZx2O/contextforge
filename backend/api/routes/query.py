@@ -52,11 +52,18 @@ async def natural_language_query(
 
     if req.context_node_id:
         try:
+            # Try element_id first, then fallback to arxiv_id
             check = await session.run(
-                "MATCH (n {arxiv_id: $id}) RETURN n LIMIT 1",
+                "MATCH (n) WHERE element_id(n) = $id RETURN n LIMIT 1",
                 id=req.context_node_id,
             )
             records = [rec async for rec in check]
+            if not records:
+                check = await session.run(
+                    "MATCH (n {arxiv_id: $id}) RETURN n LIMIT 1",
+                    id=req.context_node_id,
+                )
+                records = [rec async for rec in check]
             if not records:
                 raise HTTPException(
                     status_code=404,

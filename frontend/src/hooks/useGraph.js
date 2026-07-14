@@ -8,6 +8,9 @@ import useGraphStore from '../store/graphStore.js';
 // completes. On success it clears `graphError`; on failure it sets
 // `graphError` (the GraphCanvas renders an error banner) instead of throwing.
 //
+// Creates virtual INVOLVES edges from Gap nodes to their affected_nodes
+// so gaps stay connected to relevant papers in the force layout.
+//
 // @returns {Promise<void>} Resolves when the store has been updated (or errored).
 export async function fetchGraphData() {
   const { setNodes, setEdges, setGaps, setGraphError } = useGraphStore.getState();
@@ -18,8 +21,33 @@ export async function fetchGraphData() {
       getGraphEdges(),
       getGraphGaps(),
     ]);
+
+    // Create virtual edges from Gap nodes to their affected_nodes
+    const gapEdges = [];
+    for (const gap of gaps.gaps) {
+      if (gap.affected_nodes && gap.affected_nodes.length > 0) {
+        for (const affectedId of gap.affected_nodes) {
+          // Only add edge if both nodes exist
+          const gapNodeExists = nodes.nodes.some(n => n.id === gap.id);
+          const targetNodeExists = nodes.nodes.some(n => n.id === affectedId);
+          if (gapNodeExists && targetNodeExists) {
+            gapEdges.push({
+              source: gap.id,
+              target: affectedId,
+              type: 'INVOLVES',
+              properties: {
+                confidence: gap.severity || 1.0,
+                evidence_quote: gap.description || '',
+                is_gap_edge: true,
+              },
+            });
+          }
+        }
+      }
+    }
+
     setNodes(nodes.nodes);
-    setEdges(edges.edges);
+    setEdges([...edges.edges, ...gapEdges]);
     setGaps(gaps.gaps);
     setGraphError(null);
   } catch (err) {

@@ -1,0 +1,112 @@
+{
+  "id": "diffusion_2024",
+  "label": "Diffusion Models (2024)",
+  "paper_count": 4,
+  "edge_count": 5,
+  "papers": [
+    {
+      "arxiv_id": "2401.04567",
+      "title": "Consistency Models: Fast High-Quality Image Synthesis",
+      "authors": ["Yang Song", "Ben Poole"],
+      "publish_date": "2024-01-20",
+      "abstract": "We propose consistency models that map any point on the diffusion ODE trajectory directly to the origin, enabling 1-2 step generation.",
+      "url": "https://arxiv.org/abs/2401.04567",
+      "citation_count": 95,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2402.07890",
+      "title": "Stable Video Diffusion: Scaling Temporal Consistency",
+      "authors": ["Blattmann", "Rombach"],
+      "publish_date": "2024-02-08",
+      "abstract": "We extend image diffusion models to video generation by introducing temporal attention layers and a curriculum learning strategy.",
+      "url": "https://arxiv.org/abs/2402.07890",
+      "citation_count": 78,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2403.12345",
+      "title": "Flow Matching for Generative Modeling",
+      "authors": ["Lipman", "Chen"],
+      "publish_date": "2024-03-15",
+      "abstract": "We present flow matching, a simulation-free approach to training continuous normalizing flows that outperforms diffusion on image generation.",
+      "url": "https://arxiv.org/abs/2403.12345",
+      "citation_count": 134,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2404.09012",
+      "title": "Rectified Flow: Straightening the Generation Path",
+      "authors": ["Liu", "Gong"],
+      "publish_date": "2024-04-02",
+      "abstract": "We propose rectified flow that straightens diffusion trajectories, reducing the number of function evaluations from 50+ to under 10.",
+      "url": "https://arxiv.org/abs/2404.09012",
+      "citation_count": 56,
+      "source": "arxiv"
+    }
+  ],
+  "edges": [
+    {
+      "source": "2404.09012",
+      "target": "2403.12345",
+      "type": "EXTENDS",
+      "properties": {
+        "method": "rectified_flow",
+        "improvement": 5.0,
+        "evidence_quote": "Rectified flow reduces NFE from 50+ to under 10 while maintaining FID comparable to full diffusion.",
+        "confidence": 0.93
+      }
+    },
+    {
+      "source": "2403.12345",
+      "target": "2401.04567",
+      "type": "CHALLENGES",
+      "properties": {
+        "assumption": "Score-based diffusion is necessary for high-quality generation",
+        "evidence_quote": "Flow matching achieves lower FID than consistency models without requiring adversarial training.",
+        "confidence": 0.81
+      }
+    },
+    {
+      "source": "2402.07890",
+      "target": "2401.04567",
+      "type": "IMPLEMENTS",
+      "properties": {
+        "code_url": "https://github.com/Stability-AI/generative-models",
+        "completeness": "full"
+      }
+    },
+    {
+      "source": "2404.09012",
+      "target": "2401.04567",
+      "type": "REPLICATES_FAILED",
+      "properties": {
+        "divergence": "Rectified flow achieves comparable quality in fewer steps but does not match consistency model speed at 1 step",
+        "evidence_quote": "At 1-step generation, consistency models still outperform rectified flow by 15% on FID.",
+        "confidence": 0.77
+      }
+    },
+    {
+      "source": "2402.07890",
+      "target": "2403.12345",
+      "type": "CITES",
+      "properties": {
+        "is_direct": true
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "gap_type": "bridge_opportunity",
+      "description": "Video diffusion (SVD) and flow matching approaches remain disconnected. No work combines temporal consistency from SVD with the efficiency of rectified flow for video generation.",
+      "affected_nodes": ["2402.07890", "2404.09012"],
+      "severity": 0.78
+    },
+    {
+      "gap_type": "stale_claim",
+      "description": "Consistency models claim 1-2 step generation superiority, but newer flow-based methods approach similar speed with better training stability. The original claims have not been revisited.",
+      "affected_nodes": ["2401.04567"],
+      "severity": 0.58
+    }
+  ]
+}

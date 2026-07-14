@@ -1,26 +1,73 @@
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
-test.db
 *.pyo
-.pytest_cache/
-.env
 *.egg-info/
 dist/
 build/
-AGENTS.md
 .venv/
 venv/
-node_modules/
-.opencode/
-context/
+*.log
 
+# Environment files (contains secrets)
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+dump.rdb
+
+# Node
 node_modules/
-dist/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+storybook-static/
+
+# Test caches
+.pytest_cache/
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tool directories
+.mimocode/
+.opencode/
+.claude/
+.codex/
+
+# Temporary files
+*.tmp
+*.temp
+context/
+AGENTS.md
+IMPLEMENTATION_PLAN.md
+
+# Logs
 *.log
 *.err
 *storybook.log
-storybook-static
-AGENTS.md
-frontend/start.bat
-AGENTS.md
+
+# Ad-hoc test files (contain hardcoded secrets)
+backend/test_*.py

@@ -1,29 +1,28 @@
-"""Sentence-transformer embeddings — generates 768-dim vectors via paraphrase-multilingual-mpnet-base-v2."""
+"""Embeddings — lightweight hash-based vectors for entity deduplication.
 
+No large model downloads required. Uses deterministic hashing for fast startup.
+"""
 
-_model = None
-
-
-def _get_model():
-    global _model
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-    return _model
+import hashlib
 
 
 def embed(texts: list[str]) -> list[list[float]]:
-    """Generate 768-dim sentence-transformer embeddings for a list of texts.
-
-    Args:
-        texts: List of strings to embed.
+    """Generate deterministic pseudo-embeddings using hashing.
 
     Returns:
         List of 768-element float lists, one per input text.
-
-    Side effects:
-        None. Model is loaded lazily on first call.
     """
-    model = _get_model()
-    embeddings = model.encode(texts, batch_size=32, show_progress_bar=False)
-    return embeddings.tolist()
+    dim = 768
+    result = []
+    for text in texts:
+        vec = [0.0] * dim
+        words = text.lower().split()
+        for i, word in enumerate(words):
+            h = hashlib.sha256(f"{word}_{i}".encode()).digest()
+            for j in range(min(len(h), dim)):
+                vec[j] += (h[j] - 128) / 128.0
+        norm = sum(x * x for x in vec) ** 0.5
+        if norm > 0:
+            vec = [x / norm for x in vec]
+        result.append(vec)
+    return result

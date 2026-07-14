@@ -231,7 +231,7 @@ async def _set_job_failed(job_id: str, error_message: str):
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="failed", error_message=error_message)
         )
         await session.commit()
@@ -248,7 +248,7 @@ async def _run_gap_finder_inner(job_id: str) -> int:
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="analyzing_gaps")
         )
         await session.commit()
@@ -314,7 +314,7 @@ async def _run_gap_finder_inner(job_id: str) -> int:
     async with session_factory() as session:
         await session.execute(
             update(PipelineJobs)
-            .where(PipelineJobs.id == uuid.UUID(job_id))
+            .where(PipelineJobs.id == job_id)
             .values(status="done", completed_at=datetime.now(timezone.utc))
         )
         await session.commit()

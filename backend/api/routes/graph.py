@@ -25,7 +25,25 @@ log = logging.getLogger(__name__)
 
 
 def _node_id(n) -> str:
+    # Use arxiv_id as primary ID for consistency with edge source/target
+    arxiv_id = n.get("arxiv_id") if hasattr(n, "get") else getattr(n, "arxiv_id", None)
+    if arxiv_id:
+        return arxiv_id
     return n.element_id if hasattr(n, "element_id") else n.id
+
+
+def _sanitize_props(d: dict) -> dict:
+    """Convert Neo4j date/datetime/point objects to JSON-safe strings."""
+    from neo4j.time import Date, DateTime, Duration
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, (Date, DateTime)):
+            out[k] = str(v)
+        elif isinstance(v, Duration):
+            out[k] = str(v)
+        else:
+            out[k] = v
+    return out
 
 
 def _record_to_node(rec) -> GraphNode:
@@ -33,7 +51,7 @@ def _record_to_node(rec) -> GraphNode:
     return GraphNode(
         id=_node_id(n),
         label=list(n.labels)[0] if n.labels else "Unknown",
-        properties=NodeProperties(**dict(n)),
+        properties=NodeProperties(**_sanitize_props(dict(n))),
     )
 
 
@@ -42,7 +60,7 @@ def _record_to_neo4j_node(rec, key) -> GraphNode:
     return GraphNode(
         id=_node_id(n),
         label=list(n.labels)[0] if n.labels else "Unknown",
-        properties=NodeProperties(**dict(n)),
+        properties=NodeProperties(**_sanitize_props(dict(n))),
     )
 
 
@@ -58,9 +76,9 @@ async def get_nodes(
 
     try:
         if node_type:
-            query = f"MATCH (n:{node_type}) RETURN n LIMIT $limit SKIP $offset"
+            query = f"MATCH (n:{node_type}) RETURN n SKIP $offset LIMIT $limit"
         else:
-            query = "MATCH (n) WHERE n:Paper OR n:Author OR n:Method OR n:Dataset OR n:Claim OR n:Gap RETURN n LIMIT $limit SKIP $offset"
+            query = "MATCH (n) WHERE n:Paper OR n:Author OR n:Method OR n:Dataset OR n:Claim OR n:Gap RETURN n SKIP $offset LIMIT $limit"
         result = await session.run(query, limit=limit, offset=offset)
         records = [rec async for rec in result]
 
@@ -104,7 +122,7 @@ async def get_edges(
             MATCH (a)-[r]->(b)
             {type_filter}
             RETURN a.arxiv_id AS source, b.arxiv_id AS target, type(r) AS rel_type, properties(r) AS rel_props
-            LIMIT $limit SKIP $offset
+            SKIP $offset LIMIT $limit
         """
         params = {"limit": limit, "offset": offset, "min_confidence": min_confidence}
         if relationship_type:
@@ -166,13 +184,25 @@ async def get_gaps(session: AsyncSession = Depends(get_neo4j)):
 @router.get("/node/{node_id}", response_model=NodeDetailResponse)
 async def get_node_detail(node_id: str, session: AsyncSession = Depends(get_neo4j)):
     try:
+        # Try arxiv_id first (primary ID), then fallback to internal id
         result = await session.run(
-            "MATCH (center {arxiv_id: $node_id})-[r]-(neighbor) RETURN center, r, neighbor LIMIT 50",
+            "MATCH (center {arxiv_id: $node_id})-[r]-(neighbor) "
+            "RETURN center, r, neighbor LIMIT 50",
             node_id=node_id,
         )
         records = [rec async for rec in result]
 
         if not records:
+            # Fallback: try internal id lookup
+            result = await session.run(
+                "MATCH (center) WHERE id(center) = $node_id "
+                "OPTIONAL MATCH (center)-[r]-(neighbor) "
+                "RETURN center, r, neighbor LIMIT 50",
+                node_id=int(node_id) if node_id.isdigit() else -1,
+            )
+            records = [rec async for rec in result]
+
+        if not records or not records[0].get("center"):
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
         center = _record_to_neo4j_node(records[0], "center")

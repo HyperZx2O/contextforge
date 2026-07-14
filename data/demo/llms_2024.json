@@ -1,0 +1,134 @@
+{
+  "id": "llms_2024",
+  "label": "Large Language Models (2024)",
+  "paper_count": 5,
+  "edge_count": 6,
+  "papers": [
+    {
+      "arxiv_id": "2401.00234",
+      "title": "Scaling Laws for Neural Language Models Revisited",
+      "authors": ["James Chen", "Maria Garcia"],
+      "publish_date": "2024-01-10",
+      "abstract": "We revisit scaling laws for large language models and find that compute-optimal training deviates from Chinchilla predictions at scale.",
+      "url": "https://arxiv.org/abs/2401.00234",
+      "citation_count": 87,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2402.01567",
+      "title": "Mixture of Experts Meets Instruction Tuning",
+      "authors": ["Li Wei", "Sarah Kim"],
+      "publish_date": "2024-02-15",
+      "abstract": "We demonstrate that Mixture of Experts architectures benefit disproportionately from instruction tuning, achieving 2x efficiency gains.",
+      "url": "https://arxiv.org/abs/2402.01567",
+      "citation_count": 63,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2403.08901",
+      "title": "Efficient Fine-Tuning with LoRA: A Comprehensive Study",
+      "authors": ["Alex Turner", "Priya Patel"],
+      "publish_date": "2024-03-05",
+      "abstract": "We provide a comprehensive evaluation of LoRA and its variants across 12 NLP benchmarks, finding that rank 16 is sufficient for most tasks.",
+      "url": "https://arxiv.org/abs/2403.08901",
+      "citation_count": 45,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2404.03210",
+      "title": "Constitutional AI: Harmlessness from AI Feedback",
+      "authors": ["Yuntao Bai", "Antonio Bar"],
+      "publish_date": "2024-04-12",
+      "abstract": "We extend Constitutional AI with AI-generated feedback for harmlessness, reducing reliance on human red-teaming by 60%.",
+      "url": "https://arxiv.org/abs/2404.03210",
+      "citation_count": 112,
+      "source": "arxiv"
+    },
+    {
+      "arxiv_id": "2311.10500",
+      "title": "Direct Preference Optimization Without Reference Model",
+      "authors": ["Rafael Rafailov", "Eric Mitchell"],
+      "publish_date": "2023-11-16",
+      "abstract": "We show DPO can be applied without a frozen reference model, simplifying the alignment pipeline while maintaining performance.",
+      "url": "https://arxiv.org/abs/2311.10500",
+      "citation_count": 203,
+      "source": "arxiv"
+    }
+  ],
+  "edges": [
+    {
+      "source": "2402.01567",
+      "target": "2401.00234",
+      "type": "EXTENDS",
+      "properties": {
+        "method": "mixture_of_experts",
+        "improvement": 2.1,
+        "evidence_quote": "MoE architectures achieve 2x compute efficiency compared to dense models at the same parameter count.",
+        "confidence": 0.88
+      }
+    },
+    {
+      "source": "2403.08901",
+      "target": "2401.00234",
+      "type": "CITES",
+      "properties": {
+        "is_direct": true
+      }
+    },
+    {
+      "source": "2404.03210",
+      "target": "2311.10500",
+      "type": "EXTENDS",
+      "properties": {
+        "method": "ai_feedback",
+        "improvement": 15.0,
+        "evidence_quote": "Constitutional AI with AI feedback reduces human annotation by 60% while matching DPO alignment quality.",
+        "confidence": 0.92
+      }
+    },
+    {
+      "source": "2403.08901",
+      "target": "2402.01567",
+      "type": "CHALLENGES",
+      "properties": {
+        "assumption": "MoE requires large batch sizes for efficient training",
+        "evidence_quote": "LoRA fine-tuning of MoE models works effectively with batch sizes as small as 4.",
+        "confidence": 0.75
+      }
+    },
+    {
+      "source": "2404.03210",
+      "target": "2402.01567",
+      "type": "REPLICATES",
+      "properties": {
+        "evidence_quote": "We confirm MoE instruction tuning gains reported in prior work across our evaluation suite.",
+        "confidence": 0.82
+      }
+    },
+    {
+      "source": "2311.10500",
+      "target": "2401.00234",
+      "type": "CONTRADICTS",
+      "properties": {
+        "on_dimension": "training_compute_optimality",
+        "confidence": 0.71,
+        "evidence_quote": "DPO achieves competitive alignment without the compute budgets predicted by standard scaling laws.",
+        "timestamp": "2024-01-20T00:00:00Z"
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "gap_type": "unresolved_contradiction",
+      "description": "Scaling law predictions for compute-optimal training are contradicted by DPO alignment results, but no study has reconciled these findings in a unified framework.",
+      "affected_nodes": ["2401.00234", "2311.10500"],
+      "severity": 0.72
+    },
+    {
+      "gap_type": "low_density",
+      "description": "The intersection of MoE architectures and alignment techniques (DPO, Constitutional AI) remains under-explored. No paper directly compares these approaches on the same model family.",
+      "affected_nodes": ["2402.01567", "2404.03210", "2311.10500"],
+      "severity": 0.65
+    }
+  ]
+}
