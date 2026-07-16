@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from config import settings
 from db.models import Base
 
-_engine = create_async_engine(settings.DATABASE_URL)
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("postgresql://") and "+" not in _db_url.split("://")[0]:
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+_engine = create_async_engine(_db_url)
 _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
 
 limiter = Limiter(key_func=get_remote_address)

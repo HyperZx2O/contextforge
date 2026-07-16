@@ -27,8 +27,11 @@ def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 @asynccontextmanager
 async def lifespan(app):
-    from dependencies import create_tables
-    await create_tables()
+    try:
+        from dependencies import create_tables
+        await create_tables()
+    except Exception as exc:
+        log.warning("Database tables init skipped: %s", exc)
     try:
         from db.neo4j_client import initialize_schema
         await initialize_schema()
