@@ -52,7 +52,7 @@ async def run_pipeline_background(job_id: str, req: PipelineRunRequest):
 
 
 @router.post("/run", response_model=PipelineRunResponse, status_code=202)
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def run_pipeline(
     request: Request,
     req: PipelineRunRequest,
