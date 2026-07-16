@@ -5,10 +5,15 @@ import * as mock from './mock.js';
 // Set VITE_USE_MOCK_API=true in .env during development without a backend.
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
 
+const _apiKey = import.meta.env.VITE_API_KEY;
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
   timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: Object.assign(
+    { 'Content-Type': 'application/json' },
+    _apiKey ? { 'X-API-Key': _apiKey } : {},
+  ),
 });
 
 // Retries a function on 5xx errors with exponential backoff.

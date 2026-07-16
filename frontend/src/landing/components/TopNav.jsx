@@ -32,7 +32,6 @@ export default function TopNav() {
         </div>
 
         <div className="top-nav__actions">
-          <a className="btn btn--secondary" href="/app" onClick={handleAppLink}>Sign in</a>
           <a className="btn btn--primary" href="/app" onClick={handleAppLink}>Launch app</a>
           <button
             className="top-nav__toggle"
