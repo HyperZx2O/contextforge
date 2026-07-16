@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     GAP_TEMPORAL_YEARS: int = 5
 
     API_KEY: str = ""
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     LOG_LEVEL: str = "INFO"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
