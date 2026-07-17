@@ -114,6 +114,8 @@ async def natural_language_query(
         )
 
     results_str = json.dumps(records[:50], default=str)
+    if len(results_str) > 8000:
+        results_str = results_str[:8000] + "... (truncated)"
 
     try:
         answer = await call_llm_answer(req.question, results_str)
