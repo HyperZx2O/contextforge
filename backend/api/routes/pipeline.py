@@ -37,7 +37,7 @@ async def run_pipeline_background(job_id: str, req: PipelineRunRequest):
                               papers_found=len(paper_ids))
             entity_ids = await run_extraction(job_id, paper_ids)
             await _update_job(db, job_id, status="synthesizing",
-                              papers_processed=len(entity_ids))
+                              papers_processed=len(paper_ids))
             rel_count = await run_synthesis(job_id, paper_ids)
             await _update_job(db, job_id, status="gap_finding",
                               relationships_created=rel_count)
