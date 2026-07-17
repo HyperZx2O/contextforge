@@ -18,7 +18,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import numpy as np
 from sqlalchemy import func, select, update
@@ -82,6 +82,11 @@ def _paper_embedding_map(rows: list) -> dict[str, list[float]]:
         pid = str(row["paper_id"])
         emb = row["embedding"]
         if emb is not None:
+            if isinstance(emb, str):
+                try:
+                    emb = json.loads(emb)
+                except (ValueError, TypeError):
+                    continue
             by_paper.setdefault(pid, []).append(np.array(emb, dtype=np.float32))
     return {pid: np.mean(vecs, axis=0).tolist() for pid, vecs in by_paper.items()}
 
@@ -213,19 +218,17 @@ async def _process_pair(
     if not raw_response:
         return 0
 
-    import json as _json
     async with session_factory() as session:
-        llm_resp_str = _json.dumps(raw_response.model_dump()) if not isinstance(raw_response.model_dump(), str) else raw_response.model_dump()
         await session.execute(
             SynthesisCache.__table__.insert().values(
                 id=str(uuid.uuid4()),
                 paper_a_id=pid_a,
                 paper_b_id=pid_b,
                 cache_key=ck,
-                llm_response=llm_resp_str,
+                llm_response=raw_response.model_dump(),
                 confidence=raw_response.confidence,
                 relationship_type=raw_response.relationship_type,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.utcnow(),
             )
         )
         await session.commit()

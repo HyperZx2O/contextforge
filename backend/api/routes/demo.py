@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,7 +18,7 @@ from dependencies import get_neo4j
 router = APIRouter(prefix="/demo", tags=["demo"])
 log = logging.getLogger(__name__)
 
-_DEMO_DIR = Path(__file__).resolve().parents[3] / "data" / "demo"
+_DEMO_DIR = Path(os.environ.get("DEMO_DATA_DIR", Path(__file__).resolve().parents[3] / "data" / "demo"))
 
 
 def _list_topics() -> list[DemoTopic]:

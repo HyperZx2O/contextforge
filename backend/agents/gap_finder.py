@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from agents import DatabaseError, PipelineAgentError
 from db.neo4j_client import execute_query
@@ -315,7 +315,7 @@ async def _run_gap_finder_inner(job_id: str) -> int:
         await session.execute(
             update(PipelineJobs)
             .where(PipelineJobs.id == job_id)
-            .values(status="done", completed_at=datetime.now(timezone.utc))
+            .values(status="done", completed_at=datetime.utcnow())
         )
         await session.commit()
 

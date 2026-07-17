@@ -74,7 +74,7 @@ async def run_pipeline(
     await db.refresh(job)
 
     run_req = req.model_copy(update={"year_from": year_from, "year_to": year_to})
-    background_tasks.add_task(run_pipeline_background, job.id, run_req)
+    background_tasks.add_task(run_pipeline_background, str(job.id), run_req)
 
     return PipelineRunResponse(
         job_id=str(job.id),

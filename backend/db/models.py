@@ -36,7 +36,7 @@ class Base(DeclarativeBase):
 class PapersCache(Base):
     __tablename__ = "papers_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
     arxiv_id = Column(Text, unique=True, nullable=True)
     doi = Column(Text, nullable=True)
     title = Column(Text, nullable=False)
@@ -55,7 +55,7 @@ class PapersCache(Base):
 class EntitiesCache(Base):
     __tablename__ = "entities_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
     paper_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     entity_type = Column(Text, nullable=False)
     name = Column(Text, nullable=False)
@@ -67,7 +67,7 @@ class EntitiesCache(Base):
 class SynthesisCache(Base):
     __tablename__ = "synthesis_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
     paper_a_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     paper_b_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     cache_key = Column(Text, unique=True, nullable=False)
@@ -85,7 +85,7 @@ class SynthesisCache(Base):
 class PipelineJobs(Base):
     __tablename__ = "pipeline_jobs"
 
-    id = Column(_uuid_type(), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
     query = Column(Text, nullable=False)
     status = Column(Text, nullable=False, default="pending")
     progress = Column(Integer, default=0)

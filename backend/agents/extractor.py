@@ -3,7 +3,7 @@
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select, update
 
@@ -136,18 +136,15 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
                         continue
 
                     entity_id = str(uuid.uuid4())
-                    import json as _json
-                    props = {"papers_count": 1}
-                    props_str = _json.dumps(props) if not isinstance(props, str) else props
                     await session.execute(
                         EntitiesCache.__table__.insert().values(
                             id=entity_id,
                             paper_id=paper_id,
                             entity_type=entity["entity_type"],
                             name=entity["name"],
-                            properties=props_str,
+                            properties={"papers_count": 1},
                             embedding=None,
-                            created_at=datetime.now(timezone.utc),
+                            created_at=datetime.utcnow(),
                         )
                     )
                     await session.commit()

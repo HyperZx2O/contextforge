@@ -42,7 +42,7 @@ async def call_openrouter(system: str, user: str) -> str:
     }
     headers = {
         "Authorization": f"Bearer {s.OPENROUTER_API_KEY}",
-        "HTTP-Referer": "http://localhost",
+        "HTTP-Referer": s.APP_URL,
     }
 
     async with httpx.AsyncClient() as client:
