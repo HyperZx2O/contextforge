@@ -4,7 +4,7 @@ import os
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase
 
 _db_url = os.environ.get("DATABASE_URL", "")
@@ -20,7 +20,7 @@ else:
 
 
 def _jsonb():
-    return JSONB if _USE_PG else Text
+    return JSONB if _USE_PG else JSON
 
 def _uuid_type():
     return UUID(as_uuid=True) if _USE_PG else String(36)
