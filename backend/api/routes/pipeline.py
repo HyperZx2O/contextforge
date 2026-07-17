@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -43,12 +43,12 @@ async def run_pipeline_background(job_id: str, req: PipelineRunRequest):
                               relationships_created=rel_count)
             await run_gap_finder(job_id)
             await _update_job(db, job_id, status="done", progress=100,
-                              completed_at=datetime.now(timezone.utc))
+                              completed_at=datetime.utcnow())
         except Exception as e:
             logging.getLogger(__name__).error("Pipeline failed: %s", e)
             await _update_job(db, job_id, status="failed",
                               error_message=str(e),
-                              completed_at=datetime.now(timezone.utc))
+                              completed_at=datetime.utcnow())
 
 
 @router.post("/run", response_model=PipelineRunResponse, status_code=202)
@@ -60,7 +60,7 @@ async def run_pipeline(
     _auth: None = Depends(require_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     year_from = req.year_from or now.year - 1
     year_to = req.year_to or now.year
 
