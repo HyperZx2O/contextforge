@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession as Neo4jSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from config import settings
@@ -21,6 +22,8 @@ limiter = Limiter(key_func=get_remote_address)
 
 async def create_tables():
     async with _engine.begin() as conn:
+        if _db_url.startswith("postgresql"):
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
 
