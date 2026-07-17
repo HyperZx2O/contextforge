@@ -25,6 +25,9 @@ def _jsonb():
 def _uuid_type():
     return UUID(as_uuid=True) if _USE_PG else String(36)
 
+def _uuid_default():
+    return uuid.uuid4() if _USE_PG else str(uuid.uuid4())
+
 def _vector(dim):
     return Vector(dim) if _USE_PG else Text
 
@@ -36,7 +39,7 @@ class Base(DeclarativeBase):
 class PapersCache(Base):
     __tablename__ = "papers_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
+    id = Column(_uuid_type(), primary_key=True, default=_uuid_default)
     arxiv_id = Column(Text, unique=True, nullable=True)
     doi = Column(Text, nullable=True)
     title = Column(Text, nullable=False)
@@ -55,7 +58,7 @@ class PapersCache(Base):
 class EntitiesCache(Base):
     __tablename__ = "entities_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
+    id = Column(_uuid_type(), primary_key=True, default=_uuid_default)
     paper_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     entity_type = Column(Text, nullable=False)
     name = Column(Text, nullable=False)
@@ -67,7 +70,7 @@ class EntitiesCache(Base):
 class SynthesisCache(Base):
     __tablename__ = "synthesis_cache"
 
-    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
+    id = Column(_uuid_type(), primary_key=True, default=_uuid_default)
     paper_a_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     paper_b_id = Column(_uuid_type(), ForeignKey("papers_cache.id"), nullable=True)
     cache_key = Column(Text, unique=True, nullable=False)
@@ -85,7 +88,7 @@ class SynthesisCache(Base):
 class PipelineJobs(Base):
     __tablename__ = "pipeline_jobs"
 
-    id = Column(_uuid_type(), primary_key=True, default=uuid.uuid4)
+    id = Column(_uuid_type(), primary_key=True, default=_uuid_default)
     query = Column(Text, nullable=False)
     status = Column(Text, nullable=False, default="pending")
     progress = Column(Integer, default=0)
