@@ -14,7 +14,7 @@ All models in `backend/api/schemas.py`.
 | `query` | str | 3–200 chars |
 | `year_from` | int \| null | optional |
 | `year_to` | int \| null | optional |
-| `max_papers` | int | 10–200, default 100 |
+| `max_papers` | int | 10–30, default 30 |
 | `sources` | list[str] | default ["arxiv","github","news"] |
 
 ### `PipelineRunResponse`

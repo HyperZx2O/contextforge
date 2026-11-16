@@ -42,7 +42,7 @@ curl -X POST http://localhost:8000/pipeline/run \
 | `query` | string | yes | — | 3–200 chars |
 | `year_from` | int | no | null | |
 | `year_to` | int | no | null | |
-| `max_papers` | int | no | 100 | 10–200 |
+| `max_papers` | int | no | 30 | 10–30 |
 | `sources` | list[str] | no | ["arxiv","github","news"] | |
 
 **202 Accepted**
