@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { usePipeline } from '../hooks/usePipeline.js';
 import useGraphStore from '../store/graphStore.js';
+import SaveRunButton from './SaveRunButton.jsx';
 
 const RUNNING = ['pending', 'ingesting', 'extracting', 'synthesizing', 'gap_finding'];
 
@@ -9,17 +11,17 @@ const RUNNING = ['pending', 'ingesting', 'extracting', 'synthesizing', 'gap_find
 function pipelineStatusLabel(status, errorMessage = null) {
   switch (status) {
     case 'pending':
-      return 'Starting pipeline…';
+      return 'Starting pipeline.';
     case 'ingesting':
-      return 'Fetching papers…';
+      return 'Fetching papers.';
     case 'extracting':
-      return 'Extracting relationships…';
+      return 'Extracting relationships.';
     case 'synthesizing':
-      return 'Synthesizing knowledge graph…';
+      return 'Synthesizing knowledge graph.';
     case 'gap_finding':
-      return 'Finding research gaps…';
+      return 'Finding research gaps.';
     case 'done':
-      return 'Complete ✓';
+      return 'Complete';
     case 'failed':
       return errorMessage || 'Pipeline failed';
     default:
@@ -75,13 +77,14 @@ export default function PipelineStatus() {
         >
           <span className="status-badge__dot" />
           {statusLabel}
+          {jobStatus === 'done' && <Check size={12} aria-hidden="true" />}
         </span>
       </div>
 
       <input
         className="pipeline__input"
         data-testid="pipeline-query"
-        placeholder="Describe papers to fetch…"
+        placeholder="Describe papers to fetch."
         aria-label="Topic"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -113,6 +116,10 @@ export default function PipelineStatus() {
         </button>
       )}
 
+      {jobStatus === 'done' && (
+        <SaveRunButton query={query} />
+      )}
+
       <button
         className="btn btn--secondary pipeline__demo-toggle"
         data-testid="pipeline-demo-toggle"
@@ -130,7 +137,7 @@ export default function PipelineStatus() {
             value={selectedTopic}
             onChange={(e) => setSelectedTopic(e.target.value)}
           >
-            <option value="">Select a topic…</option>
+            <option value="">Select a topic.</option>
             {topics.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
@@ -143,7 +150,7 @@ export default function PipelineStatus() {
             onClick={handleDemoLoad}
             disabled={!selectedTopic || demoLoading}
           >
-            {demoLoading ? 'Loading…' : 'Load'}
+            {demoLoading ? 'Loading.' : 'Load'}
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import useGraphStore from '../store/graphStore.js';
 import { gapColor, severityColor } from '../constants/colors.js';
 import { titleOf } from '../utils/nodes.js';
@@ -26,7 +27,7 @@ export default function GapPanel() {
           aria-label="Toggle gaps panel"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? '−' : '+'}
+          {open ? <Minus size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
         </button>
       </div>
 

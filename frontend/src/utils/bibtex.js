@@ -17,6 +17,18 @@ export function generateBibtex(node) {
 
 export async function copyBibtex(node) {
   const bibtex = generateBibtex(node);
-  await navigator.clipboard.writeText(bibtex);
+  try {
+    await navigator.clipboard.writeText(bibtex);
+  } catch {
+    // Fallback for insecure contexts (HTTP non-localhost)
+    const ta = document.createElement('textarea');
+    ta.value = bibtex;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
   return bibtex;
 }

@@ -54,6 +54,34 @@ describe('GraphCanvas (Phase 4)', () => {
     expect(useGraphStore.getState().hoveredNode).toBe(mock.graphNodes.nodes[1].id);
   });
 
+  it('highlights the hovered edge in the accent colour', () => {
+    render(<GraphCanvas />);
+    expect(screen.getByTestId('fg-linkcolor').textContent).not.toBe('#5e6ad2');
+    fireEvent.click(screen.getByTestId('fg-linkhover'));
+    expect(screen.getByTestId('fg-linkcolor').textContent).toBe('#5e6ad2');
+  });
+
+  it('only animates particles on the edge under the pointer', () => {
+    render(<GraphCanvas />);
+    expect(screen.getByTestId('fg-particles').textContent).toBe('0');
+    fireEvent.click(screen.getByTestId('fg-linkhover'));
+    expect(screen.getByTestId('fg-particles').textContent).toBe('2');
+  });
+
+  it('zoom controls render and are clickable', () => {
+    render(<GraphCanvas />);
+    const zoomIn = screen.getByLabelText('Zoom in');
+    const zoomOut = screen.getByLabelText('Zoom out');
+    const reset = screen.getByLabelText('Reset view');
+
+    fireEvent.click(zoomIn);
+    fireEvent.click(zoomOut);
+    fireEvent.click(reset);
+
+    expect(zoomIn).toBeInTheDocument();
+    expect(reset).toBeInTheDocument();
+  });
+
   it('filters edges by activeFilters (hidden set)', () => {
     // activeFilters holds HIDDEN types; EXTENDS hidden → remaining edges shown.
     const visible = mock.graphEdges.edges.filter((e) => e.type !== 'EXTENDS').length;

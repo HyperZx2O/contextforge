@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import useGraphStore from '../store/graphStore.js';
 import { nodeColor } from '../constants/colors.js';
 
@@ -9,7 +10,7 @@ export default function NodeListView() {
   const selectNode = useGraphStore((s) => s.selectNode);
   const selectedNode = useGraphStore((s) => s.selectedNode);
   const [filter, setFilter] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const filtered = nodes.filter((n) => {
     const label = (n.properties?.title || n.properties?.name || n.id).toLowerCase();
@@ -29,7 +30,7 @@ export default function NodeListView() {
           aria-label="Toggle node list"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? '−' : '+'}
+          {open ? <Minus size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
         </button>
       </div>
       {open && (
@@ -60,7 +61,7 @@ export default function NodeListView() {
                       aria-hidden="true"
                     />
                     <span className="node-list__label">{label}</span>
-                    <span className="node-list__type">{n.type}</span>
+                    <span className="node-list__type">{n.label}</span>
                   </button>
                 </li>
               );

@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 
-// State shape per spec.md §10.1. Actions are trivial setters for now;
-// Phase 3 wires them to the mock/real API via hooks.
-const useGraphStore = create((set) => ({
+// Unified store for all graph state. New code should import this store directly.
+const useGraphStore = create((set, get) => ({
   // Graph data
   nodes: [],
   edges: [],
@@ -19,6 +18,7 @@ const useGraphStore = create((set) => ({
   activeFilters: [],
   hoveredNode: null,
   searchQuery: '',
+  matchingNodeIds: new Set(),
   viewMode: 'graph',
 
   // Pipeline state
@@ -27,6 +27,10 @@ const useGraphStore = create((set) => ({
   jobProgress: 0,
   jobError: null,
   demoLoading: false,
+
+  // Saved run state (for versioning)
+  selectedRun: null,
+  setSelectedRun: (run) => set({ selectedRun: run }),
 
   // Query state
   queryInput: '',
@@ -44,8 +48,26 @@ const useGraphStore = create((set) => ({
   selectNode: (id) => set({ selectedNode: id, selectedEdge: null }),
   selectEdge: (edge) => set({ selectedEdge: edge, selectedNode: null }),
   clearSelection: () => set({ selectedNode: null, selectedEdge: null }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  setSearchQuery: (query) => {
+    const q = query.toLowerCase();
+    const matching = q
+      ? new Set(
+          get().nodes
+            .filter((n) => {
+              const title = (n.properties?.title || '').toLowerCase();
+              const label = (n.label || '').toLowerCase();
+              const authors = (n.properties?.authors || [])
+                .map((a) => (typeof a === 'string' ? a : a?.name || '').toLowerCase())
+                .join(' ');
+              return title.includes(q) || label.includes(q) || authors.includes(q);
+            })
+            .map((n) => n.id),
+        )
+      : new Set();
+    set({ searchQuery: query, matchingNodeIds: matching });
+  },
   setViewMode: (mode) => set({ viewMode: mode }),
+  setActiveFilters: (filters) => set({ activeFilters: filters }),
   toggleFilter: (type) =>
     set((s) => ({
       activeFilters: s.activeFilters.includes(type)

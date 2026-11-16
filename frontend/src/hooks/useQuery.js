@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { postNLQuery, APIError } from '../api/client.js';
 import useGraphStore from '../store/graphStore.js';
 
@@ -14,14 +15,8 @@ const BAD_REQUEST_MESSAGE = 'Could not interpret this question. Try rephrasing.'
 //   "Could not interpret this question. Try rephrasing." message; on any other
 //   error sets `queryError` and raises the global toast via `globalError`.
 export function useQuery() {
-  const { setQueryLoading, setQueryResult, setQueryError, setGlobalError } = useGraphStore();
-
-  /**
-   * @param {string} question - The natural-language question to ask.
-   * @param {string|null} [contextNodeId] - Optional node id to scope the answer.
-   * @returns {Promise<void>} Resolves once the store reflects the result/error.
-   */
-  async function submitQuery(question, contextNodeId = null) {
+  const submitQuery = useCallback(async (question, contextNodeId = null) => {
+    const { setQueryError, setQueryLoading, setQueryResult, setGlobalError } = useGraphStore.getState();
     setQueryError(null);
     setQueryLoading(true);
     try {
@@ -38,8 +33,7 @@ export function useQuery() {
     } finally {
       setQueryLoading(false);
     }
-  }
+  }, []);
 
   return { submitQuery };
 }
-

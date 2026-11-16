@@ -1,27 +1,18 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { runPipeline, getPipelineStatus, getDemoTopics, loadDemoTopic } from '../api/client.js';
-import { fetchGraphData } from './useGraph.js';
+import { runPipeline, getPipelineStatus } from '../api/client.js';
+import { DEMO_TOPICS } from '../demoData.js';
+import { fetchGraphData, loadDemoIntoStore } from './useGraph.js';
 import useGraphStore from '../store/graphStore.js';
 
 const POLL_INTERVAL_MS = 2000;
 
 // Drives pipeline execution and demo loading for the UI.
 //
-// @returns {{
-//   runPipeline: (query: string) => Promise<void>,
-//   loadDemo: (topicId: string) => Promise<void>,
-//   getDemoTopics: () => Promise<{topics: Array<{id: string, label: string, paper_count: number, edge_count: number}>}>
-// }} An object of bound actions (see descriptions below).
-//
-// - `runPipeline(query)`: calls `POST /pipeline/run`, stores the returned
-//   `job_id`, then polls `getPipelineStatus` every 2s (ADR-4) until the job is
-//   `done` (refetches the graph via `fetchGraphData`) or `failed` (stores the
-//   error). Side effect: starts a `setInterval` that is cleared on a terminal
-//   status and on component unmount.
-// - `loadDemo(topicId)`: calls `POST /demo/load/{topicId}` then refetches the
-//   graph.
-// - `getDemoTopics()`: returns the available demo topics for the Load Demo UI.
+// Uses SSE (Server-Sent Events) for real-time progress when available,
+// falling back to polling if the SSE connection fails.
+
 export function usePipeline() {
+  const eventSourceRef = useRef(null);
   const intervalRef = useRef(null);
 
   const stopPolling = useCallback(() => {
@@ -31,52 +22,101 @@ export function usePipeline() {
     }
   }, []);
 
+  const stopSSE = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
+  const handleStatusUpdate = useCallback(async (status) => {
+    useGraphStore.getState().updateJobStatus(
+      status.status,
+      status.progress,
+      status.error_message || null,
+    );
+    if (status.status === 'done') {
+      stopSSE();
+      stopPolling();
+      await fetchGraphData();
+    } else if (status.status === 'failed') {
+      stopSSE();
+      stopPolling();
+    }
+  }, [stopSSE, stopPolling]);
+
+  const startSSE = useCallback((jobId) => {
+    try {
+      const es = new EventSource(`/pipeline/stream/${jobId}`);
+      eventSourceRef.current = es;
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleStatusUpdate(data);
+        } catch (err) {
+          console.error('[usePipeline] SSE parse error', err);
+        }
+      };
+      es.onerror = () => {
+        // Fall back to polling
+        stopSSE();
+        intervalRef.current = setInterval(() => pollOnce(jobId), POLL_INTERVAL_MS);
+      };
+    } catch {
+      // SSE not supported, use polling
+      intervalRef.current = setInterval(() => pollOnce(jobId), POLL_INTERVAL_MS);
+    }
+  }, [handleStatusUpdate, stopSSE]);
+
   const pollOnce = useCallback(
     async (jobId) => {
       try {
         const status = await getPipelineStatus(jobId);
-        useGraphStore.getState().updateJobStatus(
-          status.status,
-          status.progress,
-          status.error_message || null,
-        );
-        if (status.status === 'done') {
-          stopPolling();
-          await fetchGraphData();
-        } else if (status.status === 'failed') {
-          stopPolling();
-        }
+        await handleStatusUpdate(status);
       } catch (err) {
         stopPolling();
         useGraphStore.getState().setGlobalError(err?.message || 'Pipeline status poll failed');
         console.error('[usePipeline] status poll failed', err);
       }
     },
-    [stopPolling],
+    [handleStatusUpdate, stopPolling],
   );
 
-    const runPipelineWith = useCallback(
-      async (query) => {
-        stopPolling();
+  const runPipelineWith = useCallback(
+    async (query) => {
+      stopSSE();
+      stopPolling();
+      try {
         const res = await runPipeline({ query });
-      const jobId = res.job_id;
-      useGraphStore.getState().setJob(jobId);
-      intervalRef.current = setInterval(() => pollOnce(jobId), POLL_INTERVAL_MS);
+        const jobId = res.job_id;
+        useGraphStore.getState().setJob(jobId);
+        startSSE(jobId);
+      } catch (err) {
+        useGraphStore.getState().setGlobalError(err?.message || 'Failed to start pipeline');
+      }
     },
-    [pollOnce, stopPolling],
+    [startSSE, stopSSE, stopPolling],
   );
 
-  const loadDemo = useCallback(async (topicId) => {
+  // Demos hydrate from the bundle - no Neo4j, no backend.
+  const loadDemo = useCallback((topicId) => {
     useGraphStore.getState().setDemoLoading(true);
-    try {
-      await loadDemoTopic(topicId);
-      await fetchGraphData();
-    } finally {
+    if (!loadDemoIntoStore(topicId)) {
+      useGraphStore.getState().setGlobalError(`Unknown demo: ${topicId}`);
       useGraphStore.getState().setDemoLoading(false);
     }
   }, []);
 
-  useEffect(() => stopPolling, [stopPolling]);
+  useEffect(() => {
+    return () => {
+      stopSSE();
+      stopPolling();
+    };
+  }, [stopSSE, stopPolling]);
+
+  // Bundled, not fetched. /demo/topics needs a backend; the topic list
+  // is already in the client.
+  const getDemoTopics = useCallback(async () => ({ topics: DEMO_TOPICS }), []);
 
   return { runPipeline: runPipelineWith, loadDemo, getDemoTopics };
 }

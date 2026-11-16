@@ -1,0 +1,799 @@
+/* ============================================================
+   ContextForge account page.
+
+   Scoped entirely under .account-page so the workspace (/app) and
+   the landing page keep their own registers. Same material as the
+   landing's Console treatment: a graphite ladder tinted toward the
+   accent, hairline rules that divide rather than box, a grotesk for
+   what a person reads and a mono for what the instrument measured.
+   Lavender appears only on the one action a person takes per card.
+
+   Tokens come from src/styles/tokens.css, which is global.
+   ============================================================ */
+
+.account-page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  background:
+    radial-gradient(1100px 520px at 10% -8%, color-mix(in oklab, var(--brand-accent) 9%, transparent), transparent 72%),
+    radial-gradient(900px 560px at 92% 2%, color-mix(in oklab, var(--ink) 3.5%, transparent), transparent 68%),
+    var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.account-page ::selection {
+  background: color-mix(in oklab, var(--brand-accent) 32%, transparent);
+  color: var(--ink);
+}
+
+.account-page :focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   1. Header
+   ============================================================ */
+
+.account-page__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in oklab, var(--canvas) 82%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.account-page__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  width: 100%;
+  max-width: 1180px;
+  min-height: 56px;
+  margin-inline: auto;
+  padding: 8px var(--s-lg);
+}
+
+.account-page__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.account-page__mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.account-page__spacer {
+  flex: 1;
+}
+
+.account-page__back,
+.account-page__logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 var(--s-sm);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 220ms var(--ease-out-quart),
+    border-color 220ms var(--ease-out-quart),
+    color 220ms var(--ease-out-quart);
+}
+
+.account-page__back:hover,
+.account-page__logout:hover {
+  border-color: var(--hairline-tertiary);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* ============================================================
+   2. Body and masthead
+   ============================================================ */
+
+.account-page__body {
+  width: 100%;
+  max-width: 1180px;
+  margin-inline: auto;
+  padding: var(--s-xxl) var(--s-lg) var(--s-section);
+}
+
+.account-page__body--center {
+  display: grid;
+  align-content: center;
+  min-height: calc(100dvh - 57px);
+  padding-block: var(--s-xl);
+}
+
+.account-page__masthead {
+  display: flex;
+  align-items: center;
+  gap: var(--s-lg);
+  margin-bottom: var(--s-xl);
+  padding-bottom: var(--s-lg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.account-page__avatar {
+  flex: none;
+  box-shadow: 0 0 0 1px var(--hairline-strong), var(--shadow-md);
+}
+
+.account-page__intro {
+  min-width: 0;
+}
+
+.account-page__intro h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-headline);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.028em;
+  color: var(--ink);
+}
+
+.account-page__email {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.account-page__lede {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--ink-subtle);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   3. Grid
+   ============================================================ */
+
+.account-page__grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--s-lg);
+  align-items: stretch;
+}
+
+.account-cell {
+  display: flex;
+  flex-direction: column;
+  grid-column: span 12;
+  min-width: 0;
+}
+
+.account-cell > .account-panel {
+  flex: 1 1 auto;
+}
+
+.account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-lg);
+}
+
+.account-stack > .account-panel {
+  flex: 0 0 auto;
+}
+
+@media (min-width: 56rem) {
+  .account-cell--5 { grid-column: span 5; }
+  .account-cell--6 { grid-column: span 6; }
+  .account-cell--7 { grid-column: span 7; }
+}
+
+/* ============================================================
+   4. Panel card
+   ============================================================ */
+
+.account-page .account-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-md);
+  min-width: 0;
+  padding: var(--s-lg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--ink) 3%, transparent), transparent 42%),
+    var(--surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-page .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  margin: 0;
+  padding-bottom: var(--s-sm);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.account-page .panel-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-card-title);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+}
+
+.account-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.account-page .panel-hint {
+  margin: 0;
+  padding: var(--s-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-0);
+  color: var(--ink-subtle);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.account-panel__error {
+  margin: 0;
+  padding: var(--s-xs) var(--s-sm);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-sm);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
+
+/* ============================================================
+   5. Controls
+   A quiet control is a ruled rectangle that fills with surface on
+   hover. The accent fill is reserved for the card's primary action.
+   ============================================================ */
+
+.account-page .account-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 var(--s-sm);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--ease-out-quart),
+    border-color 180ms var(--ease-out-quart),
+    color 180ms var(--ease-out-quart);
+}
+
+.account-page .account-btn:hover:not(:disabled) {
+  border-color: var(--hairline-tertiary);
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.account-page .account-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.account-page .account-btn--sm {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+}
+
+.account-page .account-btn--accent {
+  border-color: transparent;
+  background: var(--brand-accent-fill);
+  color: oklch(19% 0.035 275);
+}
+
+.account-page .account-btn--accent:hover:not(:disabled) {
+  background: var(--brand-accent);
+  color: oklch(19% 0.035 275);
+}
+
+.account-page .account-btn--danger:hover:not(:disabled) {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+/* Fields */
+
+.account-page .account-field {
+  display: grid;
+  gap: 6px;
+}
+
+.account-page .account-field__label {
+  color: var(--ink-subtle);
+  font-size: var(--fs-caption);
+}
+
+.account-page .account-panel input[type='text'],
+.account-page .account-panel input:not([type]),
+.account-page .account-panel textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-0);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  transition: border-color 180ms var(--ease-out-quart);
+}
+
+.account-page .account-panel textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.account-page .account-panel input::placeholder,
+.account-page .account-panel textarea::placeholder {
+  color: var(--ink-tertiary);
+}
+
+.account-page .account-panel input:hover,
+.account-page .account-panel textarea:hover {
+  border-color: var(--hairline-tertiary);
+}
+
+.account-page .account-panel input:focus-visible,
+.account-page .account-panel textarea:focus-visible {
+  border-color: var(--brand-accent-line);
+}
+
+/* ============================================================
+   6. Shared list
+   ============================================================ */
+
+.account-page .account-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-page .account-list--scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-tertiary) transparent;
+}
+
+.account-page .account-list__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-md);
+  padding: var(--s-sm) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.account-page .account-list__item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.account-page .account-list__item:last-child {
+  padding-bottom: 0;
+}
+
+.account-page .account-list__item--active {
+  background: var(--brand-accent-quiet);
+  border-radius: var(--r-sm);
+  padding-inline: var(--s-sm);
+  margin-inline: calc(var(--s-sm) * -1);
+}
+
+.account-list__main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-page .account-list__main--button {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-page .account-list__main--button:hover .account-list__title {
+  color: var(--brand-accent);
+}
+
+.account-page .account-list__title {
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  transition: color 180ms var(--ease-out-quart);
+}
+
+.account-page .account-list__note {
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.account-page .account-list__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.account-page .account-list__stats b {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.account-page .account-list__meta {
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.account-list__actions {
+  display: flex;
+  flex: none;
+  gap: var(--s-xs);
+}
+
+/* ============================================================
+   7. Templates
+   ============================================================ */
+
+.account-page .templates__save {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+}
+
+.account-page .templates__list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  padding-top: var(--s-xs);
+  border-top: 1px solid var(--hairline);
+}
+
+.account-page .templates__list-title {
+  color: var(--ink-subtle);
+  font-size: var(--fs-caption);
+}
+
+/* ============================================================
+   8. View (preferences)
+   ============================================================ */
+
+.account-page .preferences__state {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-sm);
+  margin: 0;
+}
+
+.account-page .preferences__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-0);
+}
+
+.account-page .preferences__cell dt {
+  color: var(--ink-subtle);
+  font-size: var(--fs-caption);
+}
+
+.account-page .preferences__cell dd {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  text-transform: capitalize;
+}
+
+.account-page .preferences__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-xs);
+}
+
+.account-page .preferences__message {
+  margin: 0;
+  padding: var(--s-xs) var(--s-sm);
+  border: 1px solid var(--brand-accent-line);
+  border-radius: var(--r-sm);
+  background: var(--brand-accent-quiet);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+}
+
+.account-page .preferences__saved {
+  margin: 0;
+  color: var(--ink-tertiary);
+  font-size: var(--fs-caption);
+}
+
+/* ============================================================
+   9. Library
+   ============================================================ */
+
+.account-page .library__tabs {
+  display: inline-flex;
+  gap: 2px;
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-0);
+}
+
+.account-page .library__tab {
+  min-height: 30px;
+  padding: 0 var(--s-sm);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--ink-subtle);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--ease-out-quart),
+    color 180ms var(--ease-out-quart);
+}
+
+.account-page .library__tab:hover {
+  color: var(--ink);
+}
+
+.account-page .library__tab--active {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+.account-page .library__edit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s-xs);
+  min-width: 0;
+}
+
+.account-page .library__edit-actions {
+  display: flex;
+  gap: var(--s-xs);
+}
+
+/* ============================================================
+   10. Graph versions
+   ============================================================ */
+
+.account-page .graph-versions .panel-head {
+  flex-wrap: wrap;
+}
+
+.account-page .graph-versions__create {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-xs);
+  min-width: 0;
+}
+
+.account-page .graph-versions__create input {
+  width: min(190px, 100%);
+  min-width: 0;
+  min-height: 34px;
+  flex: 1;
+}
+
+.account-page .graph-versions__run {
+  margin: 0;
+  color: var(--ink-subtle);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.account-page .graph-versions__run strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.account-page .graph-versions__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-xs);
+}
+
+/* ============================================================
+   11. Signed-out and loading states
+   ============================================================ */
+
+.account-page__status {
+  display: grid;
+  place-items: center;
+  min-height: 50dvh;
+  color: var(--ink-subtle);
+  font-size: var(--fs-sm);
+}
+
+.account-page__signin {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-sm);
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  padding: var(--s-xl) var(--s-lg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--ink) 3%, transparent), transparent 42%),
+    var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.account-page__signin-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-0);
+  color: var(--ink);
+}
+
+.account-page__signin h1 {
+  margin: var(--s-xs) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-card-title);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.account-page__signin p {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--ink-subtle);
+  font-size: var(--fs-sm);
+}
+
+.account-page__signin .account-menu {
+  margin-top: var(--s-xs);
+}
+
+/* ============================================================
+   12. Small screens
+   ============================================================ */
+
+@media (max-width: 48rem) {
+  .account-page__bar {
+    padding-inline: var(--s-md);
+  }
+
+  .account-page__brand span:last-child {
+    display: none;
+  }
+
+  .account-page__body {
+    padding: var(--s-xl) var(--s-md) var(--s-xxl);
+  }
+
+  .account-page__masthead {
+    align-items: flex-start;
+    gap: var(--s-md);
+  }
+
+  .account-page .account-page__avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+
+  .account-page .account-panel {
+    padding: var(--s-md);
+  }
+
+  .account-page .panel-head {
+    flex-wrap: wrap;
+  }
+
+  .account-page .preferences__state {
+    grid-template-columns: 1fr;
+  }
+
+  .account-page .graph-versions__create {
+    width: 100%;
+  }
+
+  .account-page .graph-versions__create input {
+    flex: 1;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-page .account-btn,
+  .account-page .account-page__back,
+  .account-page .account-page__logout,
+  .account-page .library__tab,
+  .account-page .account-list__title,
+  .account-page .account-panel input,
+  .account-page .account-panel textarea {
+    transition: none;
+  }
+}

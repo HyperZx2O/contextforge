@@ -25,15 +25,13 @@ describe('NodeListView', () => {
     expect(screen.getByLabelText('Toggle node list')).toBeInTheDocument();
   });
 
-  it('expands to show node list when toggled', () => {
+  it('shows node list by default (open)', () => {
     render(<NodeListView />);
-    fireEvent.click(screen.getByLabelText('Toggle node list'));
     expect(screen.getByRole('listbox', { name: 'Graph nodes' })).toBeInTheDocument();
   });
 
   it('selects a node when clicked', () => {
     render(<NodeListView />);
-    fireEvent.click(screen.getByLabelText('Toggle node list'));
     const firstNode = mock.graphNodes.nodes[0];
     const label = firstNode.properties?.title || firstNode.id;
     fireEvent.click(screen.getByText(label));
@@ -42,7 +40,6 @@ describe('NodeListView', () => {
 
   it('filters nodes by search input', () => {
     render(<NodeListView />);
-    fireEvent.click(screen.getByLabelText('Toggle node list'));
     const input = screen.getByLabelText('Filter nodes');
     fireEvent.change(input, { target: { value: 'RAG' } });
     const items = screen.getAllByRole('option');

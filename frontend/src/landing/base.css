@@ -1,0 +1,156 @@
+/* ============================================================
+   Base rules the Floor already decided. Landing-scoped: /app keeps
+   its own reset. Two of these are global on purpose (box-sizing and
+   horizontal overflow), because they cannot be scoped usefully.
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* A single wide element must never make the page pan sideways. */
+html,
+body {
+  overflow-x: clip;
+}
+
+.landing {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.55;
+  font-weight: 400;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--color-accent);
+  scrollbar-color: var(--color-rule-2) var(--color-paper);
+}
+
+.landing ::selection {
+  background: color-mix(in oklab, var(--color-accent) 30%, transparent);
+  color: var(--color-ink);
+}
+
+.landing :focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  /* Instant: a focus ring that eases in is a focus ring the keyboard
+     user waits for. */
+  transition: none;
+}
+
+/* Outline resets only: zero specificity, so a component's own colour
+   and decoration always win over the browser's default link blue. */
+.landing :where(a) {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.landing h1,
+.landing h2,
+.landing h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-synthesis: none;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.05;
+  overflow-wrap: break-word;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+.landing h1 {
+  font-size: var(--text-display);
+  max-width: 22ch;
+}
+
+.landing h2 {
+  font-size: var(--text-section);
+  max-width: 26ch;
+  line-height: 1.08;
+}
+
+.landing h3 {
+  font-size: var(--text-title);
+  max-width: 40ch;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.landing .lead {
+  font-size: var(--text-lead);
+  line-height: 1.5;
+  max-width: 50ch;
+  color: var(--color-ink-2);
+}
+
+.landing p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.landing p:not([class]) {
+  max-width: 62ch;
+}
+
+.landing img,
+.landing video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.landing svg {
+  display: block;
+}
+
+.landing [hidden] {
+  display: none !important;
+}
+
+.landing button,
+.landing input,
+.landing select,
+.landing textarea {
+  font: inherit;
+}
+
+.landing .container {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Measured values: tabular so a column of them lines up. */
+.landing .num,
+.landing .figure {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+.landing .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing *:not(.keep-motion),
+  .landing *:not(.keep-motion)::before,
+  .landing *:not(.keep-motion)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,8 +1,17 @@
+import { forwardRef } from 'react';
 import useGraphStore from '../store/graphStore.js';
 import { nodeColor } from '../constants/colors.js';
 
 // Hover tooltip showing paper details including abstract snippet and authors.
-export default function NodeTooltip({ style }) {
+//
+// This is the only hover card on the canvas: the painter used to draw a second
+// one (title + source plate) directly beside the disc, so hovering printed the
+// same label twice. The canvas now draws at-rest labels only, and this card
+// carries the things a canvas plate cannot: authors, abstract, citations.
+//
+// It is pointer-events: none because it trails the cursor — moving onto it
+// would leave the node and unmount it — so it holds no links of its own.
+const NodeTooltip = forwardRef(function NodeTooltip(_props, ref) {
   const hoveredNode = useGraphStore((s) => s.hoveredNode);
   const nodes = useGraphStore((s) => s.nodes);
 
@@ -11,7 +20,7 @@ export default function NodeTooltip({ style }) {
   const node = nodes.find((n) => n.id === hoveredNode);
   if (!node) return null;
 
-  const { title, publish_date, citation_count, abstract, authors, source, url } = node.properties || {};
+  const { title, publish_date, citation_count, abstract, authors, source } = node.properties || {};
   const tagColor = nodeColor(node);
 
   const truncate = (text, max = 120) => {
@@ -26,7 +35,7 @@ export default function NodeTooltip({ style }) {
     .join(', ');
 
   return (
-    <div className="node-tooltip" data-testid="node-tooltip" style={{ position: 'absolute', ...style }}>
+    <div ref={ref} className="node-tooltip" data-testid="node-tooltip" style={{ position: 'absolute' }}>
       <strong>{title}</strong>
       {node.label && (
         <div className="node-tooltip__type" style={{ color: tagColor }}>
@@ -38,17 +47,8 @@ export default function NodeTooltip({ style }) {
       {citation_count != null && <div className="node-tooltip__citations">Citations: {citation_count}</div>}
       {source && <span className="node-tooltip__source">{source}</span>}
       {abstract && <p className="node-tooltip__abstract">{truncate(abstract)}</p>}
-      {url && (
-        <a
-          className="node-tooltip__link"
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          Open paper →
-        </a>
-      )}
     </div>
   );
-}
+});
+
+export default NodeTooltip;

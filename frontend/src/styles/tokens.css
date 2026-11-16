@@ -25,6 +25,30 @@
   --primary-focus: #5e69d1;
   --success: #27a644;
 
+  /* ---------- Brand accent, expressed in OKLCH ----------
+     #5e6ad2 measures oklch(56.7% 0.159 275). The landing page
+     already works in OKLCH; declaring the accent here in the same
+     space and having landing.tokens.css reference THESE is what stops
+     the two surfaces drifting apart. The hex --primary above is kept
+     for canvas and for the App.css blocks that were written against
+     it.
+
+     Do not re-derive these by hand. An earlier revision converted
+     this colour by arithmetic, got a sign error in the OKLab b row,
+     and shipped a gold accent across the whole site. */
+  --brand-accent:       oklch(66% 0.150 275);
+  --brand-accent-fill:  oklch(72% 0.140 275);
+  --brand-accent-quiet: oklch(66% 0.150 275 / 0.16);
+  --brand-accent-line:  oklch(66% 0.150 275 / 0.42);
+  --brand-focus:        oklch(78% 0.150 275);
+  /* Focus rings were brand #5e6ad2 hand-split into rgba(94,106,210,…)
+     at five sites in App.css. One token now. */
+  --brand-focus-ring:      oklch(66% 0.150 275 / 0.35);
+  --brand-focus-ring-soft: oklch(66% 0.150 275 / 0.25);
+  /* Was referenced as var(--primary-subtle, …) in App.css but never
+     declared, so it silently fell through to a different purple. */
+  --primary-subtle:     oklch(66% 0.150 275 / 0.12);
+
   /* Text */
   --ink: #f7f8f8;
   --ink-muted: #d0d6e0;
@@ -54,9 +78,13 @@
   --r-xl: 16px;
   --r-xxl: 24px;
   --r-pill: 9999px;
+  /* Long-form alias. App.css asked for var(--radius-sm) and got
+     nothing, silently falling back to a 4px literal. */
+  --radius-sm: var(--r-sm);
 
   /* Type */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Type scale — SHARED so landing + app resolve every --fs-* from one source.

@@ -21,7 +21,7 @@ vi.mock('../hooks/useGraph.js', async () => {
   return { ...actual, fetchGraphData: vi.fn(async () => {}) };
 });
 
-import { runPipeline, loadDemoTopic } from '../api/client.js';
+import { runPipeline, loadDemoTopic, getDemoTopics } from '../api/client.js';
 import PipelineStatus from '../components/PipelineStatus.jsx';
 
 beforeEach(() => {
@@ -63,7 +63,12 @@ describe('PipelineStatus UI', () => {
     fireEvent.change(screen.getByTestId('pipeline-demo-select'), { target: { value: 'rag_2024' } });
     fireEvent.click(screen.getByTestId('pipeline-demo-load'));
 
-    await waitFor(() => expect(loadDemoTopic).toHaveBeenCalledWith('rag_2024'));
+    // Demos hydrate from the bundle, so this must not reach the network.
+    // The topic list comes from the same bundle — /demo/topics needs a
+    // backend, which is why the dropdown used to fail with the backend down.
+    expect(getDemoTopics).not.toHaveBeenCalled();
+    await waitFor(() => expect(useGraphStore.getState().nodes.length).toBeGreaterThan(0));
+    expect(loadDemoTopic).not.toHaveBeenCalled();
     cleanup();
   });
 
@@ -87,10 +92,10 @@ describe('PipelineStatus UI', () => {
     cleanup();
   });
 
-  it('shows "Complete ✓" when the job is done', () => {
+  it('shows "Complete" when the job is done', () => {
     useGraphStore.setState({ jobStatus: 'done', jobProgress: 100 });
     render(<PipelineStatus />);
-    expect(screen.getByTestId('pipeline-status-label')).toHaveTextContent('Complete ✓');
+    expect(screen.getByTestId('pipeline-status-label')).toHaveTextContent('Complete');
     cleanup();
   });
 

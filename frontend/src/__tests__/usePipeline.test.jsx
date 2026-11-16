@@ -16,7 +16,7 @@ vi.mock('../hooks/useGraph.js', async () => {
   return { ...actual, fetchGraphData: vi.fn(async () => {}) };
 });
 
-import { runPipeline, getPipelineStatus, loadDemoTopic } from '../api/client.js';
+import { runPipeline, getPipelineStatus, loadDemoTopic, getDemoTopics } from '../api/client.js';
 import { fetchGraphData } from '../hooks/useGraph.js';
 import { usePipeline } from '../hooks/usePipeline.js';
 
@@ -128,18 +128,44 @@ describe('usePipeline', () => {
     vi.useRealTimers();
   });
 
-  it('loadDemo loads the topic and refetches', async () => {
+  // Demos hydrate from the bundle now, so loadDemo must NOT touch the
+  // network — that independence is the whole point of the change.
+  it('loadDemo hydrates from the bundle without any network call', async () => {
     const { result } = renderHook(() => usePipeline());
-    await act(async () => {
-      await result.current.loadDemo('rag_2024');
+    act(() => {
+      result.current.loadDemo('rag_2024');
     });
-    expect(loadDemoTopic).toHaveBeenCalledWith('rag_2024');
-    expect(fetchGraphData).toHaveBeenCalledTimes(1);
+
+    expect(loadDemoTopic).not.toHaveBeenCalled();
+    expect(fetchGraphData).not.toHaveBeenCalled();
+
+    const s = useGraphStore.getState();
+    expect(s.nodes.length).toBeGreaterThan(0);
+    expect(s.edges.length).toBeGreaterThan(0);
+    expect(s.gaps.length).toBeGreaterThan(0);
+    expect(s.demoLoading).toBe(false);
     vi.useRealTimers();
   });
 
-  it('exposes getDemoTopics', async () => {
+  it('loadDemo surfaces an error for an unknown topic', async () => {
     const { result } = renderHook(() => usePipeline());
-    expect(typeof result.current.getDemoTopics).toBe('function');
+    act(() => {
+      result.current.loadDemo('nope');
+    });
+    expect(useGraphStore.getState().globalError).toMatch(/Unknown demo/);
+    vi.useRealTimers();
+  });
+
+  // The topic list is bundled, so this must not touch the API either.
+  it('getDemoTopics serves the bundled list without a network call', async () => {
+    const { result } = renderHook(() => usePipeline());
+    const res = await result.current.getDemoTopics();
+    expect(res.topics.map((t) => t.id)).toEqual(['rag_2024', 'llms_2024', 'diffusion_2024']);
+    res.topics.forEach((t) => {
+      expect(t.paper_count).toBeGreaterThan(0);
+      expect(t.edge_count).toBeGreaterThan(0);
+    });
+    expect(getDemoTopics).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

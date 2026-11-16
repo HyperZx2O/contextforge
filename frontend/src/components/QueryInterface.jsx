@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import useGraphStore from '../store/graphStore.js';
 import { EDGE_COLORS } from '../constants/colors.js';
 import { useQuery } from '../hooks/useQuery.js';
@@ -41,7 +42,7 @@ export default function QueryInterface() {
           aria-label="Toggle query panel"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? '−' : '+'}
+          {open ? <Minus size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
         </button>
       </div>
 

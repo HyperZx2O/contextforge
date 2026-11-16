@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import useGraphStore from '../store/graphStore.js';
 import { EDGE_COLORS } from '../constants/colors.js';
 
@@ -8,27 +9,31 @@ export default function StatsPanel() {
   const gaps = useGraphStore((s) => s.gaps);
   const [open, setOpen] = useState(true);
 
-  const papers = nodes.filter((n) => n.label === 'Paper');
+  const { papers, edgesByType, topAuthors, avgCitations } = useMemo(() => {
+    const papers = nodes.filter((n) => n.label === 'Paper');
 
-  const edgesByType = edges.reduce((acc, e) => {
-    acc[e.type] = (acc[e.type] || 0) + 1;
-    return acc;
-  }, {});
+    const edgesByType = edges.reduce((acc, e) => {
+      acc[e.type] = (acc[e.type] || 0) + 1;
+      return acc;
+    }, {});
 
-  const authorCounts = {};
-  papers.forEach((p) => {
-    (p.properties?.authors || []).forEach((a) => {
-      const name = typeof a === 'string' ? a : a?.name;
-      if (name) authorCounts[name] = (authorCounts[name] || 0) + 1;
+    const authorCounts = {};
+    papers.forEach((p) => {
+      (p.properties?.authors || []).forEach((a) => {
+        const name = typeof a === 'string' ? a : a?.name;
+        if (name) authorCounts[name] = (authorCounts[name] || 0) + 1;
+      });
     });
-  });
-  const topAuthors = Object.entries(authorCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    const topAuthors = Object.entries(authorCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
 
-  const avgCitations = papers.length
-    ? Math.round(papers.reduce((s, p) => s + (p.properties?.citation_count || 0), 0) / papers.length)
-    : 0;
+    const avgCitations = papers.length
+      ? Math.round(papers.reduce((s, p) => s + (p.properties?.citation_count || 0), 0) / papers.length)
+      : 0;
+
+    return { papers, edgesByType, topAuthors, avgCitations };
+  }, [nodes, edges]);
 
   return (
     <div className="stats-panel" data-testid="stats-panel">
@@ -41,7 +46,7 @@ export default function StatsPanel() {
           aria-label="Toggle statistics panel"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? '−' : '+'}
+          {open ? <Minus size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
         </button>
       </div>
 

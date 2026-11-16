@@ -1,89 +1,100 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 
-// Force the REAL (non-mock) branch of client.js by stubbing the env flag
-// before the module is imported. Vitest's vite.config.js injects
-// VITE_USE_MOCK_API='true' for the component suite, so we override it here.
-const get = vi.fn();
-const post = vi.fn();
-
-vi.mock('axios', () => ({
-  default: { create: () => ({ get, post }) },
-  create: () => ({ get, post }),
-}));
-
 let client;
 
 beforeAll(async () => {
   vi.stubEnv('VITE_USE_MOCK_API', 'false');
+  vi.stubGlobal('fetch', vi.fn());
   client = await import('../api/client.js');
 });
 
 describe('client.js (real API mode)', () => {
   it('getGraphNodes issues GET /graph/nodes', async () => {
-    get.mockResolvedValueOnce({ data: { nodes: [] } });
-    const res = await client.getGraphNodes();
-    expect(get).toHaveBeenCalledWith('/graph/nodes', { params: {} });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ nodes: [] }) });
+    const res = await client.getGraphNodes({ limit: 10 });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/graph/nodes?limit=10'),
+      expect.objectContaining({ method: 'GET' }),
+    );
     expect(res).toEqual({ nodes: [] });
   });
 
   it('getGraphEdges issues GET /graph/edges', async () => {
-    get.mockResolvedValueOnce({ data: { edges: [] } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ edges: [] }) });
     await client.getGraphEdges();
-    expect(get).toHaveBeenCalledWith('/graph/edges', { params: {} });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/graph/edges'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('getGraphGaps issues GET /graph/gaps', async () => {
-    get.mockResolvedValueOnce({ data: { gaps: [] } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ gaps: [] }) });
     await client.getGraphGaps();
-    expect(get).toHaveBeenCalledWith('/graph/gaps');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/graph/gaps'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('getPipelineStatus issues GET /pipeline/status/{jobId}', async () => {
-    get.mockResolvedValueOnce({ data: { status: 'done' } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ status: 'done' }) });
     await client.getPipelineStatus('job-9');
-    expect(get).toHaveBeenCalledWith('/pipeline/status/job-9');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/pipeline/status/job-9'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('runPipeline issues POST /pipeline/run with the body', async () => {
-    post.mockResolvedValueOnce({ data: { job_id: 'job-1' } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ job_id: 'job-1' }) });
     const body = { query: 'RAG' };
     const res = await client.runPipeline(body);
-    expect(post).toHaveBeenCalledWith('/pipeline/run', body);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/pipeline/run'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
+    );
     expect(res).toEqual({ job_id: 'job-1' });
   });
 
   it('postNLQuery issues POST /query/natural-language with the body', async () => {
-    post.mockResolvedValueOnce({ data: { answer: 'x' } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ answer: 'x' }) });
     const body = { question: 'q', context_node_id: null };
     await client.postNLQuery(body);
-    expect(post).toHaveBeenCalledWith('/query/natural-language', body);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/query/natural-language'),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(body) }),
+    );
   });
 
   it('getDemoTopics issues GET /demo/topics', async () => {
-    get.mockResolvedValueOnce({ data: { topics: [] } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ topics: [] }) });
     await client.getDemoTopics();
-    expect(get).toHaveBeenCalledWith('/demo/topics');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/demo/topics'),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('loadDemoTopic issues POST /demo/load/{topicId}', async () => {
-    post.mockResolvedValueOnce({ data: { loaded: true } });
+    fetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ loaded: true }) });
     await client.loadDemoTopic('rag_2024');
-    expect(post).toHaveBeenCalledWith('/demo/load/rag_2024');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/demo/load/rag_2024'),
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('throws a typed APIError on network failure (graph)', async () => {
-    const err = Object.assign(new Error('network down'), { response: { status: 500 } });
-    get.mockRejectedValue(err); // always reject so all retry attempts fail
+    fetch.mockRejectedValue(new Error('network down'));
     await expect(client.getGraphNodes()).rejects.toMatchObject({
       name: 'APIError',
       code: 'GRAPH_FETCH_FAILED',
-      status: 500,
-      message: 'network down',
     });
   });
 
-  it('throws a typed APIError on network failure (pipeline run)', async () => {
-    post.mockRejectedValue(Object.assign(new Error('bad'), { response: { status: 502 } }));
+  it('throws a typed APIError on 502 (pipeline run)', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 502, statusText: 'Bad Gateway' });
     await expect(client.runPipeline({ query: 'x' })).rejects.toMatchObject({
       name: 'APIError',
       code: 'PIPELINE_RUN_FAILED',

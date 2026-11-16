@@ -371,26 +371,31 @@ export const nlQueryResponse = {
 
 // ---------------------------------------------------------------------------
 // GET /demo/topics  (3 topics)
+//
+// Counts mirror the datasets actually shipped in data/demo/. They were
+// previously 94/312, 120/445, and 87/278 — roughly 20x the real figures,
+// carried over from context/spec.md's illustrative examples. The landing
+// page rendered them to visitors.
 // ---------------------------------------------------------------------------
 export const demoTopics = {
   topics: [
     {
       id: 'rag_2024',
       label: 'Retrieval Augmented Generation (2024)',
-      paper_count: 94,
-      edge_count: 312,
+      paper_count: 3,
+      edge_count: 2,
     },
     {
       id: 'llms_2024',
       label: 'Large Language Models (2024)',
-      paper_count: 120,
-      edge_count: 445,
+      paper_count: 5,
+      edge_count: 6,
     },
     {
       id: 'diffusion_2024',
       label: 'Diffusion Models (2024)',
-      paper_count: 87,
-      edge_count: 278,
+      paper_count: 4,
+      edge_count: 5,
     },
   ],
 };

@@ -1,30 +1,45 @@
+import { useEffect } from 'react';
 import './landing.css';
+import { startLenis, stopLenis } from './lenis.js';
 import TopNav from './components/TopNav.jsx';
 import Hero from './components/Hero.jsx';
-import TrustStrip from './components/TrustStrip.jsx';
-import FeatureGrid from './components/FeatureGrid.jsx';
-import HowItWorks from './components/HowItWorks.jsx';
-import RelationshipLegend from './components/RelationshipLegend.jsx';
-import DemoSection from './components/DemoSection.jsx';
-import CtaBanner from './components/CtaBanner.jsx';
+import RecordSection from './components/RecordSection.jsx';
+import EdgeTable from './components/EdgeTable.jsx';
+import GapRows from './components/GapRows.jsx';
+import PipelineTrail from './components/PipelineTrail.jsx';
+import DatasetIndex from './components/DatasetIndex.jsx';
+import CloseBand from './components/CloseBand.jsx';
 import Footer from './components/Footer.jsx';
+import ScrollTop from './components/ScrollTop.jsx';
 
-// Marketing landing page: Linear-style dark canvas composed of the product
-// sections. Lives at "/" via the Root route switch.
+// Marketing landing page, at "/" via the Root route switch.
+//
+// The order is the instrument, then its readouts: the graph you can
+// interrogate, one edge opened to show what it holds, the eight things a
+// relationship can assert, the four ways a gap is found, what a run
+// costs, and the three graphs that are already built.
 export default function LandingPage() {
+  // Smooth scroll for this page only. Leaving /app must hand scrolling
+  // back to the browser, or the graph workspace inherits the inertia.
+  useEffect(() => {
+    startLenis();
+    return () => stopLenis();
+  }, []);
+
   return (
     <div className="landing">
       <TopNav />
       <main>
         <Hero />
-        <TrustStrip />
-        <FeatureGrid />
-        <HowItWorks />
-        <RelationshipLegend />
-        <DemoSection />
-        <CtaBanner />
+        <RecordSection />
+        <EdgeTable />
+        <GapRows />
+        <PipelineTrail />
+        <DatasetIndex />
+        <CloseBand />
       </main>
       <Footer />
+      <ScrollTop />
     </div>
   );
 }

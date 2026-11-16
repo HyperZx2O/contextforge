@@ -19,3 +19,11 @@ body {
   background: var(--canvas);
   color: var(--ink);
 }
+
+/* lucide-react icons take the current text colour and sit on the baseline by
+   default. Centre them optically against adjacent text and never let a flex
+   row squeeze them. */
+svg.lucide {
+  flex: none;
+  vertical-align: middle;
+}

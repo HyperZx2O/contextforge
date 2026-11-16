@@ -1,0 +1,428 @@
+/* ============================================================
+   Auth surface — the account menu and the sign-in dialog.
+   Shared by /app and the landing page, so this file reads ONLY the
+   global token names (src/styles/tokens.css). The landing resolves
+   those same names inside `.landing` (landing/tokens.css), which is
+   what lets one component sit on-brand on both surfaces.
+
+   Controls follow the landing's control rule: a quiet control is a
+   ruled rectangle that fills with surface on hover. Nothing glows,
+   and the primary action is the only filled control in the dialog.
+   ============================================================ */
+
+/* ---------- Account menu ---------- */
+.account-menu {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xs);
+}
+
+.account-menu__name {
+  max-width: 16ch;
+  overflow: hidden;
+  color: var(--ink-subtle);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Avatar button (clickable, navigates to /account) */
+.account-menu__avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 220ms var(--ease-out-quart), box-shadow 220ms var(--ease-out-quart);
+}
+
+.account-menu__avatar-btn:hover {
+  border-color: var(--brand-accent-line);
+  box-shadow: 0 0 0 2px var(--brand-accent-fill);
+}
+
+.account-menu__avatar-btn:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+}
+
+/* Avatar (shared by the account menu and the account page). Size comes from
+   the --avatar-size custom property set by <Avatar size={n} />. */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--avatar-size, 32px);
+  height: var(--avatar-size, 32px);
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.avatar__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ink);
+  font-size: calc(var(--avatar-size, 32px) * 0.42);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.app-header .account-menu__avatar-btn {
+  border: 0;
+  box-shadow: none;
+}
+
+.app-header .account-menu__avatar-btn:hover {
+  box-shadow: none;
+  background: var(--surface-2);
+}
+
+.app-header .account-menu .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+/* The quiet control at nav scale — the same recipe as "Open workspace"
+   in the landing nav: 44px tall, 16px side padding, stadium curve. */
+.account-menu button:not(.account-menu__avatar-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--s-md);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink);
+  /* Inherit, so the control speaks the surface's own family (the landing
+     nav sets a display face, the workspace sets its UI face). */
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 220ms var(--ease-out-quart);
+}
+
+.account-menu button:not(.account-menu__avatar-btn):hover,
+.account-menu button:not(.account-menu__avatar-btn):active {
+  background: var(--surface-2);
+}
+
+.account-menu button:not(.account-menu__avatar-btn):focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+}
+
+/* ---------- Account menu at /app header scale ----------
+   The workspace header already speaks a segmented-control language: the
+   Graph / Timeline pair sits in a surface tray (.view-toggle in App.css).
+   The account entry points join that tray instead of importing the
+   landing's 44px pill, so one header holds one kind of control. Values
+   below mirror .view-toggle / .view-toggle__btn exactly. */
+.app-header .account-menu {
+  gap: 2px;
+  margin-left: var(--s-sm);
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.app-header .account-menu button {
+  min-height: 0;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  transition: color 150ms var(--ease-out-quart);
+}
+
+/* Same feedback as the view toggle: the label brightens, the tray does
+   not. A fill here would read as an active segment. */
+.app-header .account-menu button:hover,
+.app-header .account-menu button:active {
+  background: transparent;
+  color: var(--ink);
+}
+
+.app-header .account-menu button:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 1px;
+}
+
+.app-header .account-menu__name {
+  color: var(--ink-muted);
+  font-size: var(--fs-caption);
+}
+
+/* ---------- Dialog shell ---------- */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: var(--s-md);
+  background: oklch(0% 0 0 / 0.64);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.auth-modal {
+  /* The landing declares its own accent pair; fall through to the brand
+     accent on any surface that does not. */
+  --auth-accent-fill: var(--color-accent-fill, var(--brand-accent-fill));
+  --auth-accent-ink: var(--color-accent-ink, oklch(19% 0.035 275));
+  position: relative;
+  display: grid;
+  gap: var(--s-sm);
+  width: min(400px, 100%);
+  max-height: calc(100dvh - 2 * var(--s-md));
+  overflow-y: auto;
+  padding: var(--s-lg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-card, var(--r-lg));
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+}
+
+.auth-modal h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-card-title);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.auth-modal p {
+  margin: 0;
+}
+
+.auth-modal__close {
+  position: absolute;
+  top: var(--s-sm);
+  right: var(--s-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  transition: color 220ms var(--ease-out-quart), background-color 220ms var(--ease-out-quart);
+}
+
+.auth-modal__close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.auth-modal__close:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 1px;
+}
+
+/* ---------- Google ---------- */
+.google-signin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+/* ---------- Form ---------- */
+.auth-modal form {
+  display: grid;
+  gap: var(--s-sm);
+  margin: 0;
+}
+
+.auth-modal label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-subtle);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.01em;
+}
+
+.auth-modal input {
+  min-height: 44px;
+  padding: 0 var(--s-sm);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-0);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  transition: border-color 220ms var(--ease-out-quart);
+}
+
+.auth-modal input:hover {
+  border-color: var(--hairline-tertiary);
+}
+
+.auth-modal input:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 1px;
+}
+
+/* ---------- Buttons ---------- */
+.auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-xs);
+  min-height: 46px;
+  padding: 0 var(--s-lg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 220ms var(--ease-out-quart), border-color 220ms var(--ease-out-quart);
+}
+
+.auth-btn:hover:not(:disabled),
+.auth-btn:active:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.auth-btn:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+}
+
+.auth-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The one filled control in the dialog. */
+.auth-btn--primary {
+  border-color: transparent;
+  background: var(--auth-accent-fill);
+  color: var(--auth-accent-ink);
+}
+
+.auth-btn--primary:hover:not(:disabled),
+.auth-btn--primary:active:not(:disabled) {
+  background: var(--color-accent, var(--brand-accent));
+}
+
+/* A control that reads as text, with the rule kept for the pointer. */
+.auth-link {
+  display: inline;
+  padding: 0 0 1px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline-strong);
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: color 220ms var(--ease-out-quart), border-color 220ms var(--ease-out-quart);
+}
+
+.auth-link:hover {
+  border-color: var(--brand-accent-line);
+  color: var(--ink);
+}
+
+.auth-link:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ---------- Messages ---------- */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  margin: 0;
+  color: var(--ink-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.auth-error {
+  margin: 0;
+  padding: var(--s-xs) var(--s-sm);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-sm);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.auth-switch {
+  color: var(--ink-subtle);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 48rem) {
+  /* Keeps the nav actions on one line next to "Open workspace". */
+  .top-nav__actions .account-menu button:not(.account-menu__avatar-btn) {
+    min-height: 40px;
+    padding: 0 var(--s-sm);
+    font-size: var(--fs-caption);
+  }
+
+  .top-nav__actions .account-menu__name {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-menu button,
+  .auth-btn,
+  .auth-link,
+  .auth-modal input,
+  .auth-modal__close {
+    transition: none;
+  }
+}

@@ -1,0 +1,172 @@
+/* ============================================================
+   ContextForge landing - scoped design tokens.
+
+   SCOPE NOTE: everything below hangs off `.landing`, never `:root`.
+   The workspace at /app reads src/styles/tokens.css and must not be
+   re-skinned by a change made for the marketing page.
+
+   Hallmark v2.0.0
+   genre: atmospheric (Console, dealt 1/3)
+   shape: Readout
+   hero: Ledge | nav: N10 stadium, kept | footer: Ft5 record band
+   imagery: none (the graph and the record are the image)
+   axes: dark / grotesk-sans / chromatic-lavender
+   posture: restrained | contrast: pass | fold: pass
+
+   Console's reference page is an audit trail: who changed what, when,
+   and why. This page answers the same question about the literature,
+   so it borrows the material rather than the metaphor: graphite in
+   three lightness steps, hairline panels cut from one surface, a
+   grotesk for what a person reads, a mono for what the instrument
+   measured.
+   ============================================================ */
+
+.landing {
+  /* ---------- Paper ladder ----------
+     Three lightness steps, all tinted a few degrees toward the
+     accent hue so the ground belongs to the same family as the one
+     coloured thing on the page. Never pure black. */
+  --color-paper:    oklch(16.5% 0.006 265);
+  --color-paper-2:  oklch(20% 0.007 265);
+  --color-paper-3:  oklch(12.5% 0.005 265);
+
+  /* ---------- Ink ---------- */
+  --color-ink:      oklch(96% 0.004 265);
+  --color-ink-2:    oklch(82% 0.008 265);
+  --color-ink-3:    oklch(68% 0.010 265);
+  --color-muted:    oklch(60% 0.012 265);
+
+  /* ---------- Rules ----------
+     Hairlines divide; they never box. A panel is a rule and a step,
+     not a border and a radius. */
+  --rule-hair: 1px;
+  --color-rule:     oklch(27% 0.008 265);
+  --color-rule-2:   oklch(36% 0.010 265);
+
+  /* ---------- Accent ----------
+     Declared once, in src/styles/tokens.css, and referenced here.
+     Console's amber is replaced by the project's own lavender so the
+     landing and the workspace cannot drift apart. The semantic pair
+     survives the swap: the accent is always something a person
+     asserted, never a measurement. */
+  --color-accent:       var(--brand-accent);
+  --color-accent-fill:  var(--brand-accent-fill);
+  --color-accent-quiet: var(--brand-accent-quiet);
+  --color-accent-line:  var(--brand-accent-line);
+  --color-focus:        var(--brand-focus);
+
+  /* Ink on an accent fill. Dark enough to clear AA on the 72% fill. */
+  --color-accent-ink: oklch(19% 0.035 275);
+
+  /* The one non-accent colour on the page: what the instrument
+     measured. Used for confidence scores and timings, never for a
+     surface. */
+  --color-instrument: oklch(78% 0.075 235);
+
+  /* ---------- Type ----------
+     Two families, three roles. Host Grotesk carries display and body
+     (one family, two weights). Atkinson Hyperlegible Mono is the
+     single outlier and it appears only where a value was measured:
+     edge types, confidence, timings, counts. */
+  --font-display: 'Host Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body:    'Host Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:    'Atkinson Hyperlegible Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --display-weight: 500;
+  --tracking-display: -0.028em;
+
+  /* Ratio 1.25 off a 16px body, per layout.md section 2. */
+  --text-xs:  0.8125rem;
+  --text-sm:  0.875rem;
+  --text-md:  1rem;
+  --text-lg:  1.25rem;
+  --text-title: clamp(1.25rem, 0.75vw + 0.875rem, 1.625rem);
+  --text-lead:  clamp(1rem, 0.2vw + 0.9rem, 1.25rem);
+  --text-section: clamp(2rem, 2.4vw + 1.1rem, 3.5rem);
+  --text-display: clamp(3rem, 5vw + 1rem, 6rem);
+  --text-display-s: clamp(2rem, 2.8vw + 0.9rem, 3rem);
+
+  /* ---------- Space (4pt) ---------- */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs:  8px;
+  --space-sm:  12px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  40px;
+  --space-2xl: 64px;
+  --space-3xl: 96px;
+  --space-4xl: 144px;
+
+  --container: 1440px;
+  --gutter: 64px;
+  --gap-columns: 32px;
+
+  /* Section gaps stay inside 120-176 and never repeat twice in a
+     row: the page breathes unevenly on purpose. */
+  --section-gap-s: 120px;
+  --section-gap:   144px;
+  --section-gap-l: 176px;
+
+  --measure: 62ch;
+
+  /* ---------- Radius ----------
+     Console is drawn with a ruler: a control is a 6px rectangle. The
+     nav stadium is the one exception and it is a different object. */
+  --radius-card: 10px;
+  --radius-chip: 6px;
+  --radius-pill: 999px;
+
+  /* ---------- Motion ----------
+     A value changes when its source does, and nothing else moves.
+     Exponential-out only; the browser default `ease` never ships. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+
+  /* The nav morph is a large geometric change and gets its own,
+     slower curve. No overshoot: the pill must not push past the
+     gutter on its way in. */
+  --ease-morph: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-morph: 560ms;
+
+  --shadow-pill: 0 8px 24px -12px oklch(0% 0 0 / 0.55);
+
+  /* ---------- Compatibility aliases ----------
+     BrandMark and other components shared with /app read the global
+     token names. Resolve them here so a shared component stays
+     on-brand without the workspace stylesheet being touched. */
+  --canvas:          var(--color-paper);
+  --surface-1:       var(--color-paper-2);
+  --surface-2:       var(--color-paper-2);
+  --surface-3:       var(--color-paper-2);
+  --hairline:        var(--color-rule);
+  --hairline-strong: var(--color-rule-2);
+  --primary:         var(--color-accent);
+  --primary-hover:   var(--color-focus);
+  --primary-focus:   var(--color-focus);
+  --ink:             var(--color-ink);
+  --ink-muted:       var(--color-ink-2);
+  --ink-subtle:      var(--color-ink-3);
+  --ink-tertiary:    var(--color-ink-3);
+}
+
+@media (max-width: 60rem) {
+  .landing {
+    --gutter: 24px;
+    --section-gap-s: 96px;
+    --section-gap: 112px;
+    --section-gap-l: 128px;
+  }
+}
+
+@media (max-width: 40rem) {
+  .landing {
+    --gutter: 18px;
+    --gap-columns: 16px;
+    --section-gap-s: 72px;
+    --section-gap: 80px;
+    --section-gap-l: 96px;
+  }
+}
