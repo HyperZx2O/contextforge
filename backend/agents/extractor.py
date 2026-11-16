@@ -1,15 +1,17 @@
 """Extraction agent — runs SciSpaCy NER + sentence-transformer embeddings on papers, deduplicates, writes to entities_cache."""
 
+import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 
-from agents import PipelineAgentError
-from db.models import EntitiesCache, PapersCache, PipelineJobs
-from db.postgres_client import _get_session_maker
+from agents.exceptions import PipelineAgentError, _set_job_failed
+from db.models import EntitiesCache, PapersCache, PipelineJobs, _USE_PG
+from dependencies import _session_factory
+from llm.router import call_llm
 from nlp.deduplication import find_duplicate
 from nlp.embeddings import embed
 from nlp.ner import extract_entities
@@ -21,19 +23,51 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
 _GITHUB_RE = re.compile(r"github\.com/[\w\-]+/[\w\-]+")
 
 
-async def _set_job_failed(job_id: str, error_message: str):
-    from db.models import PipelineJobs
-    from db.postgres_client import _get_session_maker
-    from sqlalchemy import select
-
-    session_factory = _get_session_maker()
+async def _resolve_entities(session_factory, job_id: str):
+    """Use LLM to merge surface-form variants within the same entity type."""
     async with session_factory() as session:
-        result = await session.execute(select(PipelineJobs).where(PipelineJobs.id == job_id))
-        job = result.scalar()
-        if job:
-            job.status = "failed"
-            job.error_message = error_message
-            await session.commit()
+        result = await session.execute(select(EntitiesCache))
+        entities = result.scalars().all()
+
+    by_type: dict[str, list] = {}
+    for e in entities:
+        by_type.setdefault(e.entity_type, []).append(e)
+
+    for etype, ents in by_type.items():
+        if len(ents) < 3:
+            continue
+        names = [e.name for e in ents]
+        prompt = (
+            f"Below are {etype} entities extracted from research papers. "
+            f"Some are different surface forms of the same real-world entity.\n\n"
+            f"Entities: {json.dumps(names)}\n\n"
+            "Return a JSON object with a single key 'merges' containing a list of "
+            "lists, where each inner list contains indices of entities that are the "
+            "same. Only include groups with 2+ entities. Example: [[0, 2], [1, 3, 5]]"
+        )
+        try:
+            raw = await call_llm(
+                "You are an entity resolution assistant. Respond with valid JSON only.",
+                prompt,
+                response_format={"type": "json_object"},
+            )
+            data = json.loads(raw)
+            merges = data.get("merges", [])
+            for group in merges:
+                if len(group) < 2:
+                    continue
+                # Keep the first, delete the rest
+                keep_id = str(ents[group[0]].id)
+                for idx in group[1:]:
+                    dup_id = str(ents[idx].id)
+                    async with session_factory() as session:
+                        dup = await session.get(EntitiesCache, dup_id)
+                        if dup:
+                            await session.delete(dup)
+                            await session.commit()
+            logger.info("Resolved %d merge groups for %s", len(merges), etype)
+        except Exception as exc:
+            logger.warning("Entity resolution failed for %s: %s", etype, exc)
 
 
 async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
@@ -58,11 +92,13 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
     try:
         entity_ids: list[str] = []
 
-        session_factory = _get_session_maker()
+        session_factory = _session_factory
 
         async with session_factory() as session:
             await session.execute(
-                update(PipelineJobs).where(PipelineJobs.id == job_id).values(status="extracting")
+                update(PipelineJobs)
+                .where(PipelineJobs.id == job_id)
+                .values(status="extracting")
             )
             await session.commit()
 
@@ -104,22 +140,21 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
                     new_emb = embed([entity["name"]])[0]
 
                     existing_result = await session.execute(
-                        select(EntitiesCache).where(EntitiesCache.entity_type == entity["entity_type"])
+                        select(EntitiesCache).where(
+                            EntitiesCache.entity_type == entity["entity_type"]
+                        )
                     )
                     existing_entities = existing_result.scalars().all()
 
-                    import json as _json
                     existing_embs = []
                     existing_ids: list[str] = []
                     for ex in existing_entities:
                         if ex.embedding is not None:
-                            # Handle SQLite text storage vs pgvector
-                            emb = ex.embedding
-                            if isinstance(emb, str):
-                                try:
-                                    emb = _json.loads(emb)
-                                except (ValueError, TypeError):
-                                    continue
+                            emb = (
+                                json.loads(ex.embedding)
+                                if isinstance(ex.embedding, str)
+                                else ex.embedding
+                            )
                             existing_embs.append(emb)
                             existing_ids.append(str(ex.id))
 
@@ -127,15 +162,21 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
 
                     if dup_idx is not None:
                         dup_id = uuid.UUID(existing_ids[dup_idx])
-                        await session.execute(
-                            update(EntitiesCache)
-                            .where(EntitiesCache.id == dup_id)
-                            .values(properties={"papers_count": "+1"})
-                        )
-                        await session.commit()
+                        existing_entity = await session.get(EntitiesCache, dup_id)
+                        if existing_entity:
+                            props = (
+                                dict(existing_entity.properties)
+                                if existing_entity.properties
+                                else {}
+                            )
+                            props["papers_count"] = props.get("papers_count", 1) + 1
+                            existing_entity.properties = props
+                            await session.commit()
                         continue
 
                     entity_id = str(uuid.uuid4())
+                    # Raw list for pgvector, JSON string for SQLite
+                    embedding = new_emb if _USE_PG else json.dumps(new_emb)
                     await session.execute(
                         EntitiesCache.__table__.insert().values(
                             id=entity_id,
@@ -143,12 +184,19 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
                             entity_type=entity["entity_type"],
                             name=entity["name"],
                             properties={"papers_count": 1},
-                            embedding=None,
-                            created_at=datetime.utcnow(),
+                            embedding=embedding,
+                            created_at=datetime.now(timezone.utc),
                         )
                     )
                     await session.commit()
                     entity_ids.append(str(entity_id))
+
+            # Post-extraction entity resolution: use LLM to merge surface-form
+            # variants within the same entity type (e.g. "CNN" / "ConvNet").
+            try:
+                await _resolve_entities(session_factory, job_id)
+            except Exception as exc:
+                logger.warning("Entity resolution skipped: %s", exc)
 
             await session.execute(
                 update(PipelineJobs)
@@ -157,7 +205,9 @@ async def run_extraction(job_id: str, paper_ids: list[str]) -> list[str]:
             )
             await session.commit()
 
-        logger.info("extraction complete job_id=%s entities=%d", job_id, len(entity_ids))
+        logger.info(
+            "extraction complete job_id=%s entities=%d", job_id, len(entity_ids)
+        )
         return entity_ids
     except PipelineAgentError:
         raise

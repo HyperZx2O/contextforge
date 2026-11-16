@@ -1,61 +1,30 @@
-"""Redis-backed key-value cache for LLM output and deduplication lookups."""
+"""In-memory key-value cache for LLM output and deduplication lookups.
+
+A plain dict is sufficient for a single-process server. Upgrade to Redis if
+multi-process caching or persistence is needed.
+"""
 
 import hashlib
+import time
 
-import redis.asyncio as aioredis
-
-_redis = None
-
-
-async def _get_redis():
-    global _redis
-    if _redis is None:
-        from config import settings
-        _redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    return _redis
+_cache: dict[str, tuple[str, float]] = {}
 
 
 async def cache_get(key: str) -> str | None:
-    """Get a value from Redis cache.
-
-    Args:
-        key: Cache key.
-
-    Returns:
-        Cached value as string, or None on miss.
-    """
-    r = await _get_redis()
-    return await r.get(key)
+    entry = _cache.get(key)
+    if entry is None:
+        return None
+    value, expiry = entry
+    if time.monotonic() > expiry:
+        del _cache[key]
+        return None
+    return value
 
 
 async def cache_set(key: str, value: str, ttl: int = 3600):
-    """Set a value in Redis cache with a TTL.
-
-    Args:
-        key: Cache key.
-        value: Value to store.
-        ttl: Time-to-live in seconds (default 3600).
-    """
-    r = await _get_redis()
-    await r.set(key, value, ex=ttl)
+    _cache[key] = (value, time.monotonic() + ttl)
 
 
 def make_cache_key(*parts: str) -> str:
-    """Generate a SHA-256 cache key from concatenated string parts.
-
-    Args:
-        *parts: Strings to concatenate and hash.
-
-    Returns:
-        64-char hex SHA-256 hash.
-    """
     raw = "".join(parts)
     return hashlib.sha256(raw.encode()).hexdigest()
-
-
-async def close_cache():
-    """Close the Redis connection and reset the global reference."""
-    global _redis
-    if _redis is not None:
-        await _redis.close()
-        _redis = None

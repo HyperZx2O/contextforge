@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   backend:
@@ -8,12 +7,18 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      DATABASE_URL: postgresql://contextforge:contextforge_pg@postgres:5432/contextforge
+      DEMO_DATA_DIR: /app/data/demo
     depends_on:
-      - neo4j
-      - postgres
-      - redis
+      neo4j:
+        condition: service_started
+      postgres:
+        condition: service_started
     volumes:
       - ./backend:/app
+      - ./data:/app/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
@@ -30,7 +35,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
@@ -49,21 +54,8 @@ services:
       - "3000:3000"
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
     restart: unless-stopped
 
 volumes:
   neo4j_data:
   postgres_data:
-  redis_data:

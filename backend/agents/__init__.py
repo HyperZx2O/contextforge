@@ -1,78 +1,51 @@
 """Agent pipeline — re-exports real implementations from submodules.
 
-Exception classes are defined here first to avoid circular imports,
-since the submodule agents import them from this package.
+Exception classes and shared helpers are defined in agents.exceptions
+to avoid circular imports (submodule agents import them here).
 """
 
 import json
 import logging
-import re
 
+from agents.exceptions import (
+    DatabaseError,
+    ExternalAPIError,
+    LLMUnavailableError,
+    PipelineAgentError,
+    _set_job_failed,
+    _strip_fences,
+)
+from utils.cache import cache_get, cache_set, make_cache_key
 
-def _strip_markdown_fences(text: str) -> str:
-    """Strip ```json ... ``` or ``` ... ``` fences from LLM responses."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*\n?", "", text)
-    text = re.sub(r"\n?```\s*$", "", text)
-    return text.strip()
-
-
-# ── Exception types (must be defined before submodule imports) ────────────────
-
-
-class PipelineAgentError(Exception):
-    pass
-
-
-class LLMUnavailableError(PipelineAgentError):
-    pass
-
-
-class DatabaseError(PipelineAgentError):
-    pass
-
-
-class ExternalAPIError(PipelineAgentError):
-    pass
-
-
-# ── Re-export real agent functions (imports AFTER exception classes) ──────────
+# ── Re-export real agent functions ───────────────────────────────────────────
 
 from agents.ingestion import run_ingestion  # noqa: E402
 from agents.extractor import run_extraction  # noqa: E402
 from agents.synthesis import run_synthesis  # noqa: E402
 from agents.gap_finder import run_gap_finder  # noqa: E402
 from llm.router import call_llm as _raw_call_llm  # noqa: E402
-from utils.cache import cache_get, cache_set, make_cache_key  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
 async def call_llm(system_prompt: str, user_prompt: str) -> dict:
-    """Call LLM with Redis caching. Returns parsed JSON dict.
+    """Call LLM with in-memory caching. Returns parsed JSON dict.
 
     Used by the NL-to-Cypher route (query.py).
-    Redis failures are silently ignored — falls through to LLM call.
     """
     cache_key = make_cache_key("llm:", system_prompt, user_prompt)
-    try:
-        cached = await cache_get(cache_key)
-        if cached:
-            logger.debug("LLM cache hit for key=%s", cache_key[:12])
-            try:
-                return json.loads(cached)
-            except (json.JSONDecodeError, TypeError):
-                pass  # stale/bad cache, re-fetch
-    except Exception:
-        logger.debug("Redis read failed, skipping cache")
+    cached = await cache_get(cache_key)
+    if cached:
+        logger.debug("LLM cache hit for key=%s", cache_key[:12])
+        try:
+            return json.loads(cached)
+        except (json.JSONDecodeError, TypeError):
+            pass  # stale/bad cache, re-fetch
 
     raw = await _raw_call_llm(system_prompt, user_prompt)
-    try:
-        await cache_set(cache_key, raw, ttl=7200)
-    except Exception:
-        logger.debug("Redis write failed, skipping cache")
+    await cache_set(cache_key, raw, ttl=7200)
 
-    cleaned = _strip_markdown_fences(raw)
+    cleaned = _strip_fences(raw)
     try:
         return json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
@@ -93,17 +66,11 @@ async def call_llm_answer(question: str, results: str) -> str:
     user = f"Question: {question}\n\nGraph query results:\n{results}\n\nAnswer:"
 
     cache_key = make_cache_key("answer:", question, results)
-    try:
-        cached = await cache_get(cache_key)
-        if cached:
-            logger.debug("LLM answer cache hit")
-            return cached
-    except Exception:
-        logger.debug("Redis read failed, skipping cache")
+    cached = await cache_get(cache_key)
+    if cached:
+        logger.debug("LLM answer cache hit")
+        return cached
 
     answer = await _raw_call_llm(system, user)
-    try:
-        await cache_set(cache_key, answer, ttl=3600)
-    except Exception:
-        logger.debug("Redis write failed, skipping cache")
+    await cache_set(cache_key, answer, ttl=3600)
     return answer

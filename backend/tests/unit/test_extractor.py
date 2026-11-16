@@ -59,13 +59,13 @@ def _emb_side_effect(responses):
 @pytest.mark.asyncio
 async def test_extractor_writes_new_entity():
     with (
-        patch("agents.extractor._get_session_maker") as mock_sm,
+        patch("agents.extractor._session_factory") as mock_sm,
         patch("agents.extractor.extract_entities") as mock_ner,
         patch("agents.extractor.embed") as mock_emb,
     ):
         mock_ner.return_value = [{"entity_type": "Method", "name": "BERT"}]
         mock_emb.side_effect = _emb_side_effect([[0.1, 0.2, 0.3]])
-        mock_sm.return_value = lambda: _fake_session_factory()
+        mock_sm.side_effect = _fake_session_factory
 
         from agents.extractor import run_extraction
 
@@ -80,7 +80,7 @@ async def test_extractor_writes_new_entity():
 @pytest.mark.asyncio
 async def test_extractor_deduplicates():
     with (
-        patch("agents.extractor._get_session_maker") as mock_sm,
+        patch("agents.extractor._session_factory") as mock_sm,
         patch("agents.extractor.extract_entities") as mock_ner,
         patch("agents.extractor.embed") as mock_emb,
     ):
@@ -92,7 +92,7 @@ async def test_extractor_deduplicates():
         existing.entity_type = "Method"
         existing.embedding = [0.1, 0.2, 0.3]
 
-        mock_sm.return_value = lambda: _fake_session_factory([existing])
+        mock_sm.side_effect = lambda: _fake_session_factory([existing])
 
         from agents.extractor import run_extraction
 
@@ -106,7 +106,7 @@ async def test_extractor_deduplicates():
 @pytest.mark.asyncio
 async def test_extractor_status_transition():
     with (
-        patch("agents.extractor._get_session_maker") as mock_sm,
+        patch("agents.extractor._session_factory") as mock_sm,
         patch("agents.extractor.extract_entities") as mock_ner,
         patch("agents.extractor.embed") as mock_emb,
     ):
@@ -121,7 +121,7 @@ async def test_extractor_status_transition():
             session_ref[0] = s
             yield s
 
-        mock_sm.return_value = _capturing_factory
+        mock_sm.side_effect = _capturing_factory
 
         from agents.extractor import run_extraction
 
@@ -136,13 +136,13 @@ async def test_extractor_status_transition():
 @pytest.mark.asyncio
 async def test_extractor_regex_finds_arxiv():
     with (
-        patch("agents.extractor._get_session_maker") as mock_sm,
+        patch("agents.extractor._session_factory") as mock_sm,
         patch("agents.extractor.extract_entities") as mock_ner,
         patch("agents.extractor.embed") as mock_emb,
     ):
         mock_ner.return_value = []
         mock_emb.side_effect = _emb_side_effect([[0.5, 0.5, 0.0]])
-        mock_sm.return_value = lambda: _fake_session_factory()
+        mock_sm.side_effect = _fake_session_factory
 
         from agents.extractor import run_extraction
 

@@ -28,7 +28,7 @@ class TestPipelineRunRequest:
     def test_valid(self):
         r = PipelineRunRequest(query="retrieval augmented generation")
         assert r.query == "retrieval augmented generation"
-        assert r.max_papers == 100
+        assert r.max_papers == 30
         assert r.sources == ["arxiv", "github", "news"]
         assert r.year_from is None
 
@@ -46,7 +46,7 @@ class TestPipelineRunRequest:
 
     def test_max_papers_too_high(self):
         with pytest.raises(ValidationError, match="max_papers"):
-            PipelineRunRequest(query="test", max_papers=500)
+            PipelineRunRequest(query="test", max_papers=50)
 
 
 class TestPipelineRunResponse:

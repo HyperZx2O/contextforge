@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from neo4j import AsyncSession
 from neo4j.exceptions import Neo4jError
 
@@ -18,7 +18,7 @@ from api.schemas import (
     NodeDetailResponse,
     NodeProperties,
 )
-from dependencies import get_neo4j
+from dependencies import get_neo4j, limiter
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 log = logging.getLogger(__name__)
@@ -35,22 +35,36 @@ def _node_id(n) -> str:
 def _sanitize_props(d: dict) -> dict:
     """Convert Neo4j date/datetime/point objects to JSON-safe strings."""
     from neo4j.time import Date, DateTime, Duration
+
     out = {}
     for k, v in d.items():
         if isinstance(v, (Date, DateTime)):
             out[k] = str(v)
         elif isinstance(v, Duration):
             out[k] = str(v)
+        elif not isinstance(v, (str, int, float, bool, list, dict, type(None))):
+            out[k] = str(v)
         else:
             out[k] = v
     return out
+
+
+_NON_PRIMARY_LABELS = {"Demo"}
+
+
+def _primary_label(labels: frozenset) -> str:
+    """Return the most meaningful label, skipping auxiliary labels like Demo."""
+    for label in labels:
+        if label not in _NON_PRIMARY_LABELS:
+            return label
+    return next(iter(labels)) if labels else "Unknown"
 
 
 def _record_to_node(rec) -> GraphNode:
     n = rec["n"]
     return GraphNode(
         id=_node_id(n),
-        label=list(n.labels)[0] if n.labels else "Unknown",
+        label=_primary_label(n.labels),
         properties=NodeProperties(**_sanitize_props(dict(n))),
     )
 
@@ -59,13 +73,15 @@ def _record_to_neo4j_node(rec, key) -> GraphNode:
     n = rec[key]
     return GraphNode(
         id=_node_id(n),
-        label=list(n.labels)[0] if n.labels else "Unknown",
+        label=_primary_label(n.labels),
         properties=NodeProperties(**_sanitize_props(dict(n))),
     )
 
 
 @router.get("/nodes", response_model=GraphNodesResponse)
+@limiter.limit("60/minute")
 async def get_nodes(
+    request: Request,
     node_type: str | None = None,
     limit: int = Query(default=500, le=2000),
     offset: int = Query(default=0, ge=0),
@@ -97,11 +113,15 @@ async def get_nodes(
         )
     except Neo4jError as e:
         log.error("Neo4j error in get_nodes: %s", e)
-        raise HTTPException(status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)})
+        raise HTTPException(
+            status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)}
+        )
 
 
 @router.get("/edges", response_model=GraphEdgesResponse)
+@limiter.limit("60/minute")
 async def get_edges(
+    request: Request,
     relationship_type: str | None = None,
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
     limit: int = Query(default=1000, le=5000),
@@ -109,12 +129,16 @@ async def get_edges(
     session: AsyncSession = Depends(get_neo4j),
 ):
     if relationship_type and relationship_type not in RELATIONSHIP_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid relationship_type: {relationship_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid relationship_type: {relationship_type}"
+        )
 
     try:
         type_filter = "WHERE type(r) IN ['CONTRADICTS','EXTENDS','REPLICATES','REPLICATES_FAILED','CHALLENGES','CITES','IMPLEMENTS','DISAGREES_ON_SCOPE']"
         if relationship_type:
-            type_filter = f"WHERE type(r) = $rel_type AND r.confidence >= $min_confidence"
+            type_filter = (
+                f"WHERE type(r) = $rel_type AND r.confidence >= $min_confidence"
+            )
         elif min_confidence > 0:
             type_filter += f" AND r.confidence >= $min_confidence"
 
@@ -128,14 +152,14 @@ async def get_edges(
         if relationship_type:
             params["rel_type"] = relationship_type
 
-        result = await session.run(query, **params)
-        records = [rec async for rec in result]
-
-        count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
-        count_result = await session.run(
+        import asyncio
+        result_task = session.run(query, **params)
+        count_task = session.run(
             f"MATCH (a)-[r]->(b) {type_filter} RETURN count(r) AS cnt",
-            **count_params,
+            **{k: v for k, v in params.items() if k not in ("limit", "offset")},
         )
+        result, count_result = await asyncio.gather(result_task, count_task)
+        records = [rec async for rec in result]
         count_records = [rec async for rec in count_result]
         total = count_records[0]["cnt"] if count_records else 0
 
@@ -145,7 +169,9 @@ async def get_edges(
                     source=r["source"] or "",
                     target=r["target"] or "",
                     type=r["rel_type"],
-                    properties=EdgeProperties(**(r["rel_props"] or {})),
+                    properties=EdgeProperties(
+                        **(_sanitize_props(r["rel_props"]) if r["rel_props"] else {})
+                    ),
                 )
                 for r in records
             ],
@@ -155,34 +181,44 @@ async def get_edges(
         )
     except Neo4jError as e:
         log.error("Neo4j error in get_edges: %s", e)
-        raise HTTPException(status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)})
+        raise HTTPException(
+            status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)}
+        )
 
 
 @router.get("/gaps", response_model=GraphGapsResponse)
-async def get_gaps(session: AsyncSession = Depends(get_neo4j)):
+@limiter.limit("30/minute")
+async def get_gaps(request: Request, session: AsyncSession = Depends(get_neo4j)):
     try:
         result = await session.run("MATCH (g:Gap) RETURN g LIMIT 500")
         records = [rec async for rec in result]
 
-        return GraphGapsResponse(gaps=[
-            GapItem(
-                id=g.element_id if hasattr(g, "element_id") else g.get("id", ""),
-                gap_type=g.get("gap_type", ""),
-                description=g.get("description", ""),
-                affected_nodes=g.get("affected_nodes", []),
-                severity=g.get("severity", 0.0),
-                detected_at=str(g.get("detected_at", "")),
-            )
-            for rec in records
-            for g in [rec["g"]]
-        ])
+        return GraphGapsResponse(
+            gaps=[
+                GapItem(
+                    id=g.element_id if hasattr(g, "element_id") else g.get("id", ""),
+                    gap_type=g.get("gap_type", ""),
+                    description=g.get("description", ""),
+                    affected_nodes=g.get("affected_nodes", []),
+                    severity=g.get("severity", 0.0),
+                    detected_at=str(g.get("detected_at", "")),
+                )
+                for rec in records
+                for g in [rec["g"]]
+            ]
+        )
     except Neo4jError as e:
         log.error("Neo4j error in get_gaps: %s", e)
-        raise HTTPException(status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)})
+        raise HTTPException(
+            status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)}
+        )
 
 
 @router.get("/node/{node_id}", response_model=NodeDetailResponse)
-async def get_node_detail(node_id: str, session: AsyncSession = Depends(get_neo4j)):
+@limiter.limit("60/minute")
+async def get_node_detail(
+    request: Request, node_id: str, session: AsyncSession = Depends(get_neo4j)
+):
     try:
         # Try arxiv_id first (primary ID), then fallback to internal id
         result = await session.run(
@@ -223,4 +259,6 @@ async def get_node_detail(node_id: str, session: AsyncSession = Depends(get_neo4
         raise
     except Neo4jError as e:
         log.error("Neo4j error in get_node_detail: %s", e)
-        raise HTTPException(status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)})
+        raise HTTPException(
+            status_code=503, detail={"code": "GRAPH_UNAVAILABLE", "message": str(e)}
+        )

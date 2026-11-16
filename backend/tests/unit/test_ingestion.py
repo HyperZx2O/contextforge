@@ -49,13 +49,6 @@ ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </feed>"""
 
 
-def _mock_settings(**overrides):
-    m = MagicMock()
-    for attr, val in overrides.items():
-        setattr(m, attr, val)
-    return m
-
-
 def _mock_transport_arxiv(request):
     if "export.arxiv.org" in str(request.url):
         return httpx.Response(200, text=ARXIV_XML)
@@ -110,12 +103,13 @@ async def test_fetch_arxiv_empty():
 
 @pytest.mark.asyncio
 async def test_enrich_semantic_scholar():
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(SEMANTIC_SCHOLAR_API_KEY="test_key")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.SEMANTIC_SCHOLAR_API_KEY = "test_key"
 
         def _transport(request):
             if "semanticscholar.org" in str(request.url):
-                return httpx.Response(200, json={"citationCount": 42, "authors": []})
+                # Batch endpoint returns an array matching input order
+                return httpx.Response(200, json=[{"citationCount": 42, "authors": []}])
             return httpx.Response(404)
 
         transport = httpx.MockTransport(_transport)
@@ -127,8 +121,8 @@ async def test_enrich_semantic_scholar():
 
 @pytest.mark.asyncio
 async def test_enrich_ss_429_skip():
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(SEMANTIC_SCHOLAR_API_KEY="test_key")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.SEMANTIC_SCHOLAR_API_KEY = "test_key"
 
         def _transport(request):
             return httpx.Response(429)
@@ -138,13 +132,14 @@ async def test_enrich_ss_429_skip():
             papers = [{"arxiv_id": "2301.00001", "title": "Test"}]
             enriched = await _enrich_semantic_scholar(client, papers)
         assert len(enriched) == 1
+        # No citation_count added since the batch request failed
         assert "citation_count" not in enriched[0]
 
 
 @pytest.mark.asyncio
 async def test_enrich_ss_no_key():
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(SEMANTIC_SCHOLAR_API_KEY="")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.SEMANTIC_SCHOLAR_API_KEY = ""
         async with httpx.AsyncClient() as client:
             papers = [{"arxiv_id": "2301.00001", "title": "Test"}]
             enriched = await _enrich_semantic_scholar(client, papers)
@@ -173,8 +168,8 @@ async def test_fetch_github_success():
             return httpx.Response(200, content=b"Test README content")
         return httpx.Response(404)
 
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(GITHUB_TOKEN="test_token")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.GITHUB_TOKEN = "test_token"
         transport = httpx.MockTransport(_transport)
         async with httpx.AsyncClient(transport=transport) as client:
             papers = await _fetch_github(client, "test")
@@ -189,8 +184,8 @@ async def test_fetch_github_403_skip():
     def _transport(request):
         return httpx.Response(403)
 
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(GITHUB_TOKEN="test_token")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.GITHUB_TOKEN = "test_token"
         transport = httpx.MockTransport(_transport)
         async with httpx.AsyncClient(transport=transport) as client:
             papers = await _fetch_github(client, "test")
@@ -216,8 +211,8 @@ async def test_fetch_newsapi_success():
             return httpx.Response(200, json=news_resp)
         return httpx.Response(404)
 
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(NEWS_API_KEY="test_key")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.NEWS_API_KEY = "test_key"
         transport = httpx.MockTransport(_transport)
         async with httpx.AsyncClient(transport=transport) as client:
             papers = await _fetch_newsapi(client, "test", 2023)
@@ -231,8 +226,8 @@ async def test_fetch_newsapi_error_skip():
     def _transport(request):
         return httpx.Response(500)
 
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(NEWS_API_KEY="test_key")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.NEWS_API_KEY = "test_key"
         transport = httpx.MockTransport(_transport)
         async with httpx.AsyncClient(transport=transport) as client:
             papers = await _fetch_newsapi(client, "test", 2023)
@@ -241,8 +236,8 @@ async def test_fetch_newsapi_error_skip():
 
 @pytest.mark.asyncio
 async def test_fetch_newsapi_no_key():
-    with patch("agents.ingestion._settings") as mock_settings:
-        mock_settings.return_value = _mock_settings(NEWS_API_KEY="")
+    with patch("agents.ingestion.settings") as mock_settings:
+        mock_settings.NEWS_API_KEY = ""
         async with httpx.AsyncClient() as client:
             papers = await _fetch_newsapi(client, "test", 2023)
     assert papers == []

@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
-    OPENROUTER_MODEL: str = "mistralai/mixtral-8x7b-instruct"
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
     LLM_TIMEOUT_SECONDS: int = 30
     LLM_MAX_RETRIES: int = 3
 
@@ -15,25 +15,31 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
-    REDIS_URL: str = "redis://redis:6379/0"
-
     ARXIV_RATE_LIMIT_PER_SECOND: int = 3
     SEMANTIC_SCHOLAR_API_KEY: str = ""
     GITHUB_TOKEN: str = ""
     NEWS_API_KEY: str = ""
 
     CONFIDENCE_THRESHOLD: float = 0.7
-    MAX_PAPERS_PER_QUERY: int = 200
-    ENTITY_DEDUP_SIMILARITY_THRESHOLD: float = 0.85
-    GAP_DENSITY_THRESHOLD: float = 0.3
     GAP_TEMPORAL_YEARS: int = 5
 
-    API_KEY: str = ""
+    JWT_SECRET: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Leave unset to derive from ENV: Secure+SameSite=None in production,
+    # plain HttpOnly+Lax for local development over http.
+    REFRESH_COOKIE_SECURE: bool | None = None
+    REFRESH_COOKIE_SAMESITE: str = ""
+    # Google OAuth client ID (the same value the frontend uses). Google
+    # sign-in is disabled when empty, so the app still boots without it.
+    GOOGLE_CLIENT_ID: str = ""
+
+    ENV: str = "development"
     APP_URL: str = "http://localhost:8000"
     BACKEND_CORS_ORIGINS: str = "https://contextforge-chi.vercel.app,http://localhost:3000,http://localhost:5173"
     LOG_LEVEL: str = "INFO"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

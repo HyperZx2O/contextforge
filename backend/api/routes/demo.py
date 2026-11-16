@@ -1,14 +1,16 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from neo4j import AsyncSession
 from neo4j.exceptions import Neo4jError
 
-from api.deps import require_api_key
+from api.deps import get_current_user
 from api.schemas import (
+    RELATIONSHIP_TYPES,
     DemoLoadResponse,
     DemoTopic,
     DemoTopicsResponse,
@@ -19,6 +21,13 @@ router = APIRouter(prefix="/demo", tags=["demo"])
 log = logging.getLogger(__name__)
 
 _DEMO_DIR = Path(os.environ.get("DEMO_DATA_DIR", Path(__file__).resolve().parents[3] / "data" / "demo"))
+
+_SAFE_KEY_RE = re.compile(r"[^a-zA-Z0-9_]")
+
+
+def _safe_cypher_key(key: str) -> str:
+    """Strip non-alphanumeric chars to prevent Cypher injection via property keys."""
+    return _SAFE_KEY_RE.sub("", key)
 
 
 def _list_topics() -> list[DemoTopic]:
@@ -49,7 +58,7 @@ async def list_demo_topics():
 @router.post("/load/{topic_id}", response_model=DemoLoadResponse)
 async def load_demo(
     topic_id: str,
-    _auth: None = Depends(require_api_key),
+    _current_user=Depends(get_current_user),
     session: AsyncSession = Depends(get_neo4j),
 ):
     file_path = _DEMO_DIR / f"{topic_id}.json"
@@ -73,15 +82,23 @@ async def load_demo(
     gaps = data.get("gaps", [])
 
     try:
+        # Clear all existing graph data so each demo loads into a clean slate.
+        # The demo endpoint is a "reset + load" operation — stale pipeline data
+        # would otherwise drown the handful of demo papers and make every demo
+        # topic appear identical.
         await session.run("MATCH (n) DETACH DELETE n")
 
         if papers:
             await session.run(
                 "UNWIND $papers AS p "
-                "CREATE (n:Paper {arxiv_id: p.arxiv_id, title: p.title, "
-                "authors: p.authors, publish_date: date(p.publish_date), "
-                "abstract: p.abstract, url: p.url, citation_count: p.citation_count, "
-                "source: p.source})",
+                "MERGE (n:Paper:Demo {arxiv_id: p.arxiv_id}) "
+                "SET n.title = p.title, "
+                "    n.authors = p.authors, "
+                "    n.publish_date = date(p.publish_date), "
+                "    n.abstract = p.abstract, "
+                "    n.url = p.url, "
+                "    n.citation_count = p.citation_count, "
+                "    n.source = p.source",
                 papers=[
                     {
                         "arxiv_id": p.get("arxiv_id", ""),
@@ -91,7 +108,7 @@ async def load_demo(
                         "abstract": p.get("abstract", ""),
                         "url": p.get("url", ""),
                         "citation_count": p.get("citation_count", 0),
-                        "source": p.get("source", ""),
+                        "source": "demo",
                     }
                     for p in papers
                 ],
@@ -99,9 +116,13 @@ async def load_demo(
 
         for edge in edges:
             rel_type = edge.get("type", "CITES")
+            if rel_type not in RELATIONSHIP_TYPES:
+                log.warning("Skipping edge with invalid rel_type: %s", rel_type)
+                continue
             props = edge.get("properties", {})
+            safe_props = {_safe_cypher_key(k): v for k, v in props.items() if _safe_cypher_key(k)}
             props_list = [
-                f"r.{k} = ${k}" for k in props.keys()
+                f"r.{k} = ${k}" for k in safe_props.keys()
             ]
             set_clause = ", ".join(props_list)
             set_clause = f" SET {set_clause}" if set_clause else ""
@@ -115,14 +136,14 @@ async def load_demo(
             params = {
                 "source": edge.get("source", ""),
                 "target": edge.get("target", ""),
-                **props,
+                **safe_props,
             }
             await session.run(cypher, **params)
 
         if gaps:
             await session.run(
                 "UNWIND $gaps AS g "
-                "CREATE (n:Gap {gap_type: g.gap_type, description: g.description, "
+                "CREATE (n:Gap:Demo {gap_type: g.gap_type, description: g.description, "
                 "affected_nodes: g.affected_nodes, severity: g.severity, "
                 "detected_at: datetime()})",
                 gaps=[

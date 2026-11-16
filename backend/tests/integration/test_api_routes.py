@@ -125,9 +125,17 @@ class TestPipeline:
 
     @pytest.mark.asyncio
     async def test_status_returns_200(self, client):
-        run_resp = await client.post("/pipeline/run", json={"query": "test status endpoint"})
-        job_id = run_resp.json()["job_id"]
-        resp = await client.get(f"/pipeline/status/{job_id}")
+        # Mock agents so the background pipeline task completes instantly
+        mock_asyncio = AsyncMock(return_value=[])
+        with (
+            patch("api.routes.pipeline.run_ingestion", mock_asyncio),
+            patch("api.routes.pipeline.run_extraction", mock_asyncio),
+            patch("api.routes.pipeline.run_synthesis", AsyncMock(return_value=0)),
+            patch("api.routes.pipeline.run_gap_finder", AsyncMock()),
+        ):
+            run_resp = await client.post("/pipeline/run", json={"query": "test status endpoint"})
+            job_id = run_resp.json()["job_id"]
+            resp = await client.get(f"/pipeline/status/{job_id}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["job_id"] == job_id
@@ -142,12 +150,22 @@ class TestPipeline:
 
     @pytest.mark.asyncio
     async def test_rate_limit_429(self, client):
-        for i in range(5):
-            resp = await client.post("/pipeline/run", json={"query": f"rate limit test {i}"})
-            assert resp.status_code == 202
-        resp = await client.post("/pipeline/run", json={"query": "rate limit test 6"})
-        assert resp.status_code == 429
-        assert resp.json()["detail"]["code"] == "RATE_LIMIT_EXCEEDED"
+        # Mock agents so background tasks complete instantly
+        mock_asyncio = AsyncMock(return_value=[])
+        with (
+            patch("api.routes.pipeline.run_ingestion", mock_asyncio),
+            patch("api.routes.pipeline.run_extraction", mock_asyncio),
+            patch("api.routes.pipeline.run_synthesis", AsyncMock(return_value=0)),
+            patch("api.routes.pipeline.run_gap_finder", AsyncMock()),
+        ):
+            # Send 31 sequential requests to exceed 30/min rate limit
+            for i in range(31):
+                resp = await client.post("/pipeline/run", json={"query": f"rate limit test {i}"})
+                if i < 30:
+                    assert resp.status_code == 202, f"Request {i} expected 202, got {resp.status_code}"
+                else:
+                    assert resp.status_code == 429, f"Request {i} expected 429, got {resp.status_code}"
+                    assert resp.json()["detail"]["code"] == "RATE_LIMIT_EXCEEDED"
 
 
 # ── Graph ─────────────────────────────────────────────────────────────────────
@@ -430,17 +448,18 @@ class TestDemo:
         data = resp.json()
         assert "topics" in data
         assert len(data["topics"]) >= 1
-        first = data["topics"][0]
-        assert first["id"] == "rag_2024"
-        assert first["paper_count"] == 3
+        rag = next((t for t in data["topics"] if t["id"] == "rag_2024"), None)
+        assert rag is not None, "rag_2024 topic not found in demo topics"
+        assert rag["paper_count"] == 3
 
     @pytest.mark.asyncio
     async def test_load_200(self, client):
+        headers = await _auth_headers(client)
         mock_session = AsyncMock()
         mock_session.run = AsyncMock(return_value=_aiter([]))
         override = await _make_override(mock_session)
         app.dependency_overrides[get_neo4j] = override
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as c:
             resp = await c.post("/demo/load/rag_2024")
         app.dependency_overrides.pop(get_neo4j, None)
         assert resp.status_code == 200
@@ -450,16 +469,18 @@ class TestDemo:
 
     @pytest.mark.asyncio
     async def test_load_404_nonexistent(self, client):
-        resp = await client.post("/demo/load/nonexistent_topic")
+        headers = await _auth_headers(client)
+        resp = await client.post("/demo/load/nonexistent_topic", headers=headers)
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_load_503_neo4j_error(self, client):
+        headers = await _auth_headers(client)
         mock_session = AsyncMock()
         mock_session.run = AsyncMock(side_effect=Neo4jError("connection lost"))
         override = await _make_override(mock_session)
         app.dependency_overrides[get_neo4j] = override
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as c:
             resp = await c.post("/demo/load/rag_2024")
         app.dependency_overrides.pop(get_neo4j, None)
         assert resp.status_code == 503
@@ -523,61 +544,196 @@ class TestErrorHandling:
 
 # ── Auth (Phase 10) ──────────────────────────────────────────────────────────
 
+async def _register(c, email="user@example.com", password="supersecret1"):
+    return await c.post(
+        "/auth/register", json={"email": email, "password": password}
+    )
+
+
+async def _auth_headers(c) -> dict:
+    """Register a throwaway user and return an Authorization header."""
+    email = f"user-{uuid.uuid4().hex[:8]}@example.com"
+    reg = await _register(c, email=email)
+    return {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+
 class TestAuthentication:
-    @pytest_asyncio.fixture(autouse=True)
-    def _reset_api_key(self):
-        original = config.settings.API_KEY
-        yield
-        config.settings.API_KEY = original
-
     @pytest.mark.asyncio
-    async def test_pipeline_run_requires_auth(self):
-        config.settings.API_KEY = TEST_API_KEY
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.post("/pipeline/run", json={"query": "test query"})
-        assert resp.status_code == 401
-        assert resp.json()["detail"]["code"] == "UNAUTHORIZED"
-
-    @pytest.mark.asyncio
-    async def test_query_requires_auth(self):
-        config.settings.API_KEY = TEST_API_KEY
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.post("/query/natural-language", json={"question": "What papers exist?"})
+    async def test_protected_route_rejects_anonymous(self, client):
+        resp = await client.get("/runs")
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_demo_load_requires_auth(self):
-        config.settings.API_KEY = TEST_API_KEY
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.post("/demo/load/test-topic")
+    async def test_protected_route_rejects_malformed_token(self, client):
+        resp = await client.get(
+            "/runs", headers={"Authorization": "Bearer not-a-jwt"}
+        )
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_wrong_key_rejected(self):
-        config.settings.API_KEY = TEST_API_KEY
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test", headers={"X-API-Key": "wrong-key"}) as c:
-            resp = await c.post("/query/natural-language", json={"question": "What papers exist?"})
+    async def test_protected_route_rejects_token_signed_with_other_key(self, client):
+        import auth
+
+        original = config.settings.JWT_SECRET
+        try:
+            config.settings.JWT_SECRET = "some-other-secret"
+            forged = auth.create_access_token(str(uuid.uuid4()), "attacker@example.com")
+        finally:
+            config.settings.JWT_SECRET = original
+
+        resp = await client.get(
+            "/runs", headers={"Authorization": f"Bearer {forged}"}
+        )
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_health_no_auth_required(self):
-        config.settings.API_KEY = TEST_API_KEY
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.get("/health")
+    async def test_register_then_access_protected_route(self, client):
+        reg = await _register(client)
+        assert reg.status_code == 201
+        body = reg.json()
+        assert body["token_type"] == "bearer"
+        assert body["user"]["email"] == "user@example.com"
+
+        resp = await client.get(
+            "/runs", headers={"Authorization": f"Bearer {body['access_token']}"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["runs"] == []
+
+    @pytest.mark.asyncio
+    async def test_register_normalizes_email_and_rejects_duplicates(self, client):
+        assert (await _register(client, email="Mixed@Example.com")).status_code == 201
+        dup = await _register(client, email="mixed@example.com")
+        assert dup.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_login_is_case_insensitive_and_checks_password(self, client):
+        await _register(client, email="Case@Test.com", password="supersecret1")
+
+        ok = await client.post(
+            "/auth/login", json={"email": "CASE@test.com", "password": "supersecret1"}
+        )
+        assert ok.status_code == 200
+        assert ok.json()["access_token"]
+
+        bad = await client.post(
+            "/auth/login", json={"email": "case@test.com", "password": "wrong-password"}
+        )
+        assert bad.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_refresh_rotates_the_session(self, client):
+        await _register(client)
+        first = await client.post("/auth/refresh")
+        assert first.status_code == 200
+        assert first.json()["user"]["email"] == "user@example.com"
+
+        # The rotated cookie is valid for a second refresh.
+        second = await client.post("/auth/refresh")
+        assert second.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_refresh_rejects_unknown_token(self, client):
+        resp = await client.post(
+            "/auth/refresh", cookies={"refresh_token": "not-a-real-token"}
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_logout_revokes_refresh_token(self, client):
+        await _register(client)
+        token = client.cookies.get("refresh_token")
+        assert token
+
+        assert (await client.post("/auth/logout")).status_code == 200
+
+        resp = await client.post("/auth/refresh", cookies={"refresh_token": token})
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_demo_load_requires_login(self, client):
+        resp = await client.post("/demo/load/test-topic")
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_health_no_auth_required(self, client):
+        resp = await client.get("/health")
         assert resp.status_code == 200
 
+    # ── Google sign-in ───────────────────────────────────────────────────
+
     @pytest.mark.asyncio
-    async def test_dev_mode_no_auth_enforced(self):
-        config.settings.API_KEY = ""
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            resp = await c.post("/pipeline/run", json={"query": "dev mode test"})
-        assert resp.status_code == 202
+    async def test_google_login_requires_configuration(self, client, monkeypatch):
+        monkeypatch.setattr(config.settings, "GOOGLE_CLIENT_ID", "")
+        resp = await client.post("/auth/google", json={"credential": "x" * 40})
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_google_login_rejects_invalid_credential(self, client, monkeypatch):
+        monkeypatch.setattr(
+            config.settings, "GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com"
+        )
+        resp = await client.post("/auth/google", json={"credential": "not-a-google-jwt" * 2})
+        assert resp.status_code == 401
+
+    def test_google_token_verifier_rejects_junk(self):
+        import auth
+
+        assert auth.verify_google_id_token("garbage" * 5, "client-id") is None
+        assert auth.verify_google_id_token("garbage" * 5, "") is None
+
+    @pytest.mark.asyncio
+    async def test_google_login_provisions_then_reuses_local_user(
+        self, client, monkeypatch
+    ):
+        monkeypatch.setattr(
+            config.settings, "GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com"
+        )
+        claims = {
+            "email": "Google.User@Example.com",
+            "email_verified": True,
+            "name": "Google User",
+            "sub": "google-sub-1",
+        }
+        with patch("api.routes.auth.verify_google_id_token", return_value=claims):
+            first = await client.post("/auth/google", json={"credential": "credential-value-1234"})
+            assert first.status_code == 200
+            assert first.json()["user"]["email"] == "google.user@example.com"
+            assert first.json()["user"]["display_name"] == "Google User"
+
+            headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+            runs = await client.get("/runs", headers=headers)
+            assert runs.status_code == 200
+
+            second = await client.post("/auth/google", json={"credential": "credential-value-1234"})
+            assert second.status_code == 200
+            assert second.json()["user"]["id"] == first.json()["user"]["id"]
+
+    @pytest.mark.asyncio
+    async def test_google_login_links_existing_email_account(self, client, monkeypatch):
+        monkeypatch.setattr(
+            config.settings, "GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com"
+        )
+        reg = await _register(client, email="linked@example.com")
+        assert reg.status_code == 201
+
+        claims = {"email": "linked@example.com", "email_verified": True, "name": "L"}
+        with patch("api.routes.auth.verify_google_id_token", return_value=claims):
+            resp = await client.post("/auth/google", json={"credential": "credential-value-1234"})
+
+        assert resp.status_code == 200
+        assert resp.json()["user"]["id"] == reg.json()["user"]["id"]
+
+    @pytest.mark.asyncio
+    async def test_google_login_refuses_unverified_email(self, client, monkeypatch):
+        monkeypatch.setattr(
+            config.settings, "GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com"
+        )
+        claims = {"email": "nope@example.com", "email_verified": False}
+        with patch("api.routes.auth.verify_google_id_token", return_value=claims):
+            resp = await client.post("/auth/google", json={"credential": "credential-value-1234"})
+
+        assert resp.status_code == 401
 
 
 # ── Security (Phase 10) ──────────────────────────────────────────────────────

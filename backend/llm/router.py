@@ -10,12 +10,13 @@ from llm.openrouter_client import call_openrouter
 logger = logging.getLogger(__name__)
 
 
-async def call_llm(system: str, user: str) -> str:
+async def call_llm(system: str, user: str, response_format: dict | None = None) -> str:
     """Route LLM call: try Groq first, fall back to OpenRouter.
 
     Args:
         system: System prompt.
         user: User prompt.
+        response_format: Optional response format (e.g. {"type": "json_object"}).
 
     Returns:
         LLM response text.
@@ -27,10 +28,12 @@ async def call_llm(system: str, user: str) -> str:
         LLMUnavailableError: If both providers fail.
     """
     try:
-        return await call_groq(system, user)
+        return await call_groq(system, user, response_format=response_format)
     except GroqError as exc:
         logger.warning("Groq failed (%s), falling back to OpenRouter", exc)
     try:
-        return await call_openrouter(system, user)
+        return await call_openrouter(system, user, response_format=response_format)
     except OpenRouterError as exc:
-        raise LLMUnavailableError(f"Both LLM providers failed. OpenRouter: {exc}") from exc
+        raise LLMUnavailableError(
+            f"Both LLM providers failed. OpenRouter: {exc}"
+        ) from exc

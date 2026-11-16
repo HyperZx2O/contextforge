@@ -31,7 +31,7 @@ class PipelineRunRequest(BaseModel):
     query: str
     year_from: int | None = None
     year_to: int | None = None
-    max_papers: int = 100
+    max_papers: int = 30
     sources: list[str] = ["arxiv", "github", "news"]
 
     @field_validator("query")
@@ -42,8 +42,8 @@ class PipelineRunRequest(BaseModel):
     @field_validator("max_papers")
     @classmethod
     def max_papers_range(cls, v: int) -> int:
-        if not 10 <= v <= 200:
-            raise ValueError("max_papers must be 10-200")
+        if not 10 <= v <= 30:
+            raise ValueError("max_papers must be 10-30")
         return v
 
 

@@ -1,9 +1,9 @@
 """Neo4j Cypher execution and schema initialization — uses the shared driver from dependencies."""
 
-import asyncio
 import logging
 
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
+from utils.backoff import retry
 
 logger = logging.getLogger(__name__)
 
@@ -21,24 +21,14 @@ _CONSTRAINTS_AND_INDEXES = [
 _RETRYABLE = (ServiceUnavailable, SessionExpired, OSError)
 
 
-async def execute_query(cypher: str, params: dict | None = None,
-                        max_attempts: int = 2) -> list[dict]:
+@retry(max_attempts=2, base_delay=1.0, exceptions=_RETRYABLE)
+async def execute_query(cypher: str, params: dict | None = None) -> list[dict]:
     """Execute a Cypher query against Neo4j with retry on transient errors."""
     from dependencies import get_neo4j_driver
-    last_exc = None
-    for attempt in range(max_attempts):
-        try:
-            driver = get_neo4j_driver()
-            async with driver.session() as session:
-                result = await session.run(cypher, params or {})
-                return [dict(record) async for record in result]
-        except _RETRYABLE as exc:
-            last_exc = exc
-            logger.warning("Neo4j retryable error (attempt %d/%d): %s",
-                           attempt + 1, max_attempts, exc)
-            if attempt < max_attempts - 1:
-                await asyncio.sleep(1.0)
-    raise last_exc  # type: ignore[misc]
+    driver = get_neo4j_driver()
+    async with driver.session() as session:
+        result = await session.run(cypher, params or {})
+        return [dict(record) async for record in result]
 
 
 async def initialize_schema():

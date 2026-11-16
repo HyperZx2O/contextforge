@@ -119,17 +119,15 @@ async def test_synthesis_valid_response_writes_neo4j():
     ]
 
     with (
-        patch("agents.synthesis._get_session_maker") as mock_sm,
+        patch("agents.synthesis._session_factory") as mock_sm,
         patch("agents.synthesis.execute_query", new_callable=AsyncMock) as mock_neo4j,
         patch("agents.synthesis.call_llm", new_callable=AsyncMock) as mock_llm,
-        patch("agents.synthesis._settings") as mock_settings,
+        patch("agents.synthesis.settings") as mock_settings,
     ):
-        mock_settings_obj = MagicMock()
-        mock_settings_obj.CONFIDENCE_THRESHOLD = 0.7
-        mock_settings.return_value = mock_settings_obj
+        mock_settings.CONFIDENCE_THRESHOLD = 0.7
         mock_llm.return_value = _VALID_LLM_RESPONSE
         mock_neo4j.return_value = [{"r": {}}]
-        mock_sm.return_value = lambda: _fake_session_factory(
+        mock_sm.side_effect = lambda: _fake_session_factory(
             entities=entities, papers=[paper_a, paper_b]
         )
 
@@ -166,16 +164,14 @@ async def test_synthesis_cache_hit_skips_llm():
     }
 
     with (
-        patch("agents.synthesis._get_session_maker") as mock_sm,
+        patch("agents.synthesis._session_factory") as mock_sm,
         patch("agents.synthesis.execute_query", new_callable=AsyncMock) as mock_neo4j,
         patch("agents.synthesis.call_llm", new_callable=AsyncMock) as mock_llm,
-        patch("agents.synthesis._settings") as mock_settings,
+        patch("agents.synthesis.settings") as mock_settings,
     ):
-        mock_settings_obj = MagicMock()
-        mock_settings_obj.CONFIDENCE_THRESHOLD = 0.7
-        mock_settings.return_value = mock_settings_obj
+        mock_settings.CONFIDENCE_THRESHOLD = 0.7
         mock_neo4j.return_value = [{"r": {}}]
-        mock_sm.return_value = lambda: _fake_session_factory(
+        mock_sm.side_effect = lambda: _fake_session_factory(
             entities=entities,
             papers=[paper_a, paper_b],
             cache_entries=[cached_entry],
@@ -204,16 +200,14 @@ async def test_synthesis_low_confidence_discarded():
     ]
 
     with (
-        patch("agents.synthesis._get_session_maker") as mock_sm,
+        patch("agents.synthesis._session_factory") as mock_sm,
         patch("agents.synthesis.execute_query", new_callable=AsyncMock) as mock_neo4j,
         patch("agents.synthesis.call_llm", new_callable=AsyncMock) as mock_llm,
-        patch("agents.synthesis._settings") as mock_settings,
+        patch("agents.synthesis.settings") as mock_settings,
     ):
-        mock_settings_obj = MagicMock()
-        mock_settings_obj.CONFIDENCE_THRESHOLD = 0.7
-        mock_settings.return_value = mock_settings_obj
+        mock_settings.CONFIDENCE_THRESHOLD = 0.7
         mock_llm.return_value = _LOW_CONF_RESPONSE
-        mock_sm.return_value = lambda: _fake_session_factory(
+        mock_sm.side_effect = lambda: _fake_session_factory(
             entities=entities, papers=[paper_a, paper_b]
         )
 
@@ -240,21 +234,19 @@ async def test_synthesis_invalid_json_retries():
     ]
 
     with (
-        patch("agents.synthesis._get_session_maker") as mock_sm,
+        patch("agents.synthesis._session_factory") as mock_sm,
         patch("agents.synthesis.execute_query", new_callable=AsyncMock) as mock_neo4j,
         patch("agents.synthesis.call_llm", new_callable=AsyncMock) as mock_llm,
-        patch("agents.synthesis._settings") as mock_settings,
+        patch("agents.synthesis.settings") as mock_settings,
     ):
-        mock_settings_obj = MagicMock()
-        mock_settings_obj.CONFIDENCE_THRESHOLD = 0.7
-        mock_settings.return_value = mock_settings_obj
+        mock_settings.CONFIDENCE_THRESHOLD = 0.7
         mock_llm.side_effect = [
             "not valid json {{{",
             "also bad {{{{",
             _VALID_LLM_RESPONSE,
         ]
         mock_neo4j.return_value = [{"r": {}}]
-        mock_sm.return_value = lambda: _fake_session_factory(
+        mock_sm.side_effect = lambda: _fake_session_factory(
             entities=entities, papers=[paper_a, paper_b]
         )
 

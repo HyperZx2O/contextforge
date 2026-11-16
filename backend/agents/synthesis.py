@@ -18,15 +18,20 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 
-from agents import DatabaseError, PipelineAgentError
+from agents.exceptions import (
+    DatabaseError,
+    PipelineAgentError,
+    _set_job_failed,
+    _strip_fences,
+)
 from api.schemas import LLMRelationshipResponse as RelationshipResult
 from db.models import EntitiesCache, PapersCache, PipelineJobs, SynthesisCache
-from db.postgres_client import _get_session_maker
+from dependencies import _session_factory
 from db.neo4j_client import execute_query
 from llm.router import call_llm
 
@@ -45,8 +50,20 @@ _SYSTEM_PROMPT = (
     "}\n\n"
     "If no meaningful relationship exists beyond incidental topic overlap, return:\n"
     '{"relationship_type": "NONE", "confidence": 0.0, "evidence_quote": "", "dimension": "", "direction": "a_to_b"}\n\n'
-    "Do not invent quotes. The evidence_quote must come from the text you are given."
+    "Do not invent quotes. The evidence_quote must come from the text you are given.\n\n"
+    "Examples:\n"
+    "Example 1 (CONTRADICTS):\n"
+    "Paper A claims retrieval accuracy drops 18% under long context. Paper B claims RAG maintains accuracy.\n"
+    '{"relationship_type": "CONTRADICTS", "confidence": 0.91, "evidence_quote": "Our results show retrieval accuracy drops 18% under long-context conditions.", "dimension": "retrieval accuracy", "direction": "a_to_b"}\n\n'
+    "Example 2 (EXTENDS):\n"
+    "Paper A proposes a base method. Paper B adds an optimization on top.\n"
+    '{"relationship_type": "EXTENDS", "confidence": 0.85, "evidence_quote": "We build upon the method proposed by [A] and add X.", "dimension": "method efficiency", "direction": "b_to_a"}\n\n'
+    "Example 3 (CITES):\n"
+    "Paper B references Paper A for background without making a claim.\n"
+    '{"relationship_type": "CITES", "confidence": 0.7, "evidence_quote": "As shown in [A], ...", "dimension": "background", "direction": "b_to_a"}\n'
 )
+
+_JSON_RESPONSE_FORMAT = {"type": "json_object"}
 
 _USER_TEMPLATE = (
     "Paper A:\nTitle: {title_a}\nPublished: {date_a}\nAbstract: {abstract_a}\n\n"
@@ -54,15 +71,11 @@ _USER_TEMPLATE = (
     "Identify the relationship between Paper A and Paper B."
 )
 
+from config import settings
+
 _K = 10
 _MAX_PARSE_RETRIES = 2
 _CONCURRENCY_LIMIT = 5
-_FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL)
-
-
-def _settings():
-    from config import settings
-    return settings
 
 
 def _cache_key(arxiv_a: str, arxiv_b: str) -> str:
@@ -71,22 +84,12 @@ def _cache_key(arxiv_a: str, arxiv_b: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _strip_fences(text: str) -> str:
-    m = _FENCE_RE.search(text)
-    return m.group(1).strip() if m else text.strip()
-
-
 def _paper_embedding_map(rows: list) -> dict[str, list[float]]:
     by_paper: dict[str, list[list[float]]] = {}
     for row in rows:
         pid = str(row["paper_id"])
         emb = row["embedding"]
         if emb is not None:
-            if isinstance(emb, str):
-                try:
-                    emb = json.loads(emb)
-                except (ValueError, TypeError):
-                    continue
             by_paper.setdefault(pid, []).append(np.array(emb, dtype=np.float32))
     return {pid: np.mean(vecs, axis=0).tolist() for pid, vecs in by_paper.items()}
 
@@ -144,10 +147,14 @@ async def _neo4j_write(cypher: str, params: dict | None = None):
         raise DatabaseError(f"Neo4j write failed: {exc}") from exc
 
 
-async def _call_llm_with_retry(system: str, user: str, pair_label: str) -> RelationshipResult | None:
+async def _call_llm_with_retry(
+    system: str, user: str, pair_label: str
+) -> RelationshipResult | None:
     for attempt in range(_MAX_PARSE_RETRIES + 1):
         try:
-            raw_text = await call_llm(system, user)
+            raw_text = await call_llm(
+                system, user, response_format=_JSON_RESPONSE_FORMAT
+            )
             cleaned = _strip_fences(raw_text)
             parsed = json.loads(cleaned)
             return RelationshipResult(**parsed)
@@ -161,14 +168,182 @@ async def _call_llm_with_retry(system: str, user: str, pair_label: str) -> Relat
     return None
 
 
-async def _process_pair(
-    pid_a: str,
-    pid_b: str,
+async def _process_batch(
+    batch: list[tuple[str, str]],
     papers: dict,
     session_factory,
     confidence_threshold: float,
     semaphore: asyncio.Semaphore,
 ) -> int:
+    """Process a batch of paper pairs in a single LLM call."""
+    # Filter valid pairs
+    valid_pairs = []
+    for pid_a, pid_b in batch:
+        paper_a = papers.get(pid_a)
+        paper_b = papers.get(pid_b)
+        if paper_a and paper_b and paper_a.arxiv_id and paper_b.arxiv_id:
+            valid_pairs.append((pid_a, pid_b, paper_a, paper_b))
+
+    if not valid_pairs:
+        return 0
+
+    # Check cache for each pair
+    uncached = []
+    cached_results = 0
+    for pid_a, pid_b, paper_a, paper_b in valid_pairs:
+        ck = _cache_key(paper_a.arxiv_id, paper_b.arxiv_id)
+        async with session_factory() as session:
+            cache_result = await session.execute(
+                select(SynthesisCache).where(SynthesisCache.cache_key == ck)
+            )
+            cached = cache_result.scalar_one_or_none()
+            if cached and cached.relationship_type and cached.confidence:
+                if cached.confidence >= confidence_threshold:
+                    source_id = paper_a.arxiv_id
+                    target_id = paper_b.arxiv_id
+                    if (
+                        cached.llm_response
+                        and cached.llm_response.get("direction") == "b_to_a"
+                    ):
+                        source_id, target_id = target_id, source_id
+                    props = {
+                        "source_arxiv_id": source_id,
+                        "target_arxiv_id": target_id,
+                        "confidence": cached.confidence,
+                        "evidence_quote": cached.llm_response.get("evidence_quote", "")
+                        if cached.llm_response
+                        else "",
+                        "on_dimension": cached.llm_response.get("dimension", "")
+                        if cached.llm_response
+                        else "",
+                    }
+                    cypher, params = _build_cypher(cached.relationship_type, props)
+                    await _neo4j_write(cypher, params)
+                    cached_results += 1
+                continue
+            uncached.append((pid_a, pid_b, paper_a, paper_b, ck))
+
+    if not uncached:
+        return cached_results
+
+    # Build batch prompt
+    batch_prompt = (
+        "Analyze the following paper pairs and classify each relationship.\n\n"
+    )
+    for i, (pid_a, pid_b, paper_a, paper_b, ck) in enumerate(uncached):
+        batch_prompt += (
+            f"--- Pair {i + 1} ---\n"
+            f"Paper A:\nTitle: {paper_a.title or ''}\nPublished: {str(paper_a.publish_date or '')}\nAbstract: {paper_a.abstract or ''}\n\n"
+            f"Paper B:\nTitle: {paper_b.title or ''}\nPublished: {str(paper_b.publish_date or '')}\nAbstract: {paper_b.abstract or ''}\n\n"
+        )
+    batch_prompt += (
+        f"Return a JSON object with a single key 'results' containing an array of "
+        f"{len(uncached)} objects, one per pair, in the same order. Each object must follow "
+        f"the schema: {{relationship_type, confidence, evidence_quote, dimension, direction}}."
+    )
+
+    async with semaphore:
+        raw_text = await _call_llm_with_retry_batch(
+            _SYSTEM_PROMPT, batch_prompt, f"batch-{len(uncached)}", len(uncached)
+        )
+
+    if not raw_text:
+        return cached_results
+
+    try:
+        parsed = json.loads(_strip_fences(raw_text))
+        results = parsed.get("results", []) if isinstance(parsed, dict) else parsed
+    except Exception:
+        logger.warning("Failed to parse batch response")
+        return cached_results
+
+    rel_count = cached_results
+    for i, (pid_a, pid_b, paper_a, paper_b, ck) in enumerate(uncached):
+        if i >= len(results):
+            break
+        r = results[i]
+        if not isinstance(r, dict):
+            continue
+        try:
+            result = RelationshipResult(**r)
+        except Exception:
+            continue
+
+        # Cache the result
+        async with session_factory() as session:
+            await session.execute(
+                SynthesisCache.__table__.insert().values(
+                    id=str(uuid.uuid4()),
+                    paper_a_id=pid_a,
+                    paper_b_id=pid_b,
+                    cache_key=ck,
+                    llm_response=result.model_dump(),
+                    confidence=result.confidence,
+                    relationship_type=result.relationship_type,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
+
+        if (
+            result.relationship_type == "NONE"
+            or result.confidence < confidence_threshold
+        ):
+            continue
+
+        source_id = paper_a.arxiv_id
+        target_id = paper_b.arxiv_id
+        if result.direction == "b_to_a":
+            source_id, target_id = target_id, source_id
+
+        props = {
+            "source_arxiv_id": source_id,
+            "target_arxiv_id": target_id,
+            "confidence": result.confidence,
+            "evidence_quote": result.evidence_quote,
+            "on_dimension": result.dimension,
+        }
+        cypher, params = _build_cypher(result.relationship_type, props)
+        await _neo4j_write(cypher, params)
+        rel_count += 1
+
+    return rel_count
+
+
+async def _call_llm_with_retry_batch(
+    system: str, user: str, label: str, expected: int
+) -> str | None:
+    for attempt in range(_MAX_PARSE_RETRIES + 1):
+        try:
+            raw_text = await call_llm(
+                system, user, response_format=_JSON_RESPONSE_FORMAT
+            )
+            cleaned = _strip_fences(raw_text)
+            parsed = json.loads(cleaned)
+            # Validate it's a dict with 'results' or a list
+            if isinstance(parsed, dict) and "results" in parsed:
+                if len(parsed["results"]) != expected:
+                    logger.warning(
+                        "Batch response has %d results, expected %d",
+                        len(parsed["results"]),
+                        expected,
+                    )
+            elif isinstance(parsed, list):
+                if len(parsed) != expected:
+                    logger.warning(
+                        "Batch response has %d results, expected %d",
+                        len(parsed),
+                        expected,
+                    )
+            return raw_text
+        except Exception as exc:
+            logger.warning(
+                "LLM parse error on attempt %d for batch %s: %s",
+                attempt + 1,
+                label,
+                exc,
+            )
+    return None
     paper_a = papers.get(pid_a)
     paper_b = papers.get(pid_b)
     if not paper_a or not paper_b:
@@ -189,14 +364,21 @@ async def _process_pair(
             if cached.confidence >= confidence_threshold:
                 source_id = paper_a.arxiv_id
                 target_id = paper_b.arxiv_id
-                if cached.llm_response and cached.llm_response.get("direction") == "b_to_a":
+                if (
+                    cached.llm_response
+                    and cached.llm_response.get("direction") == "b_to_a"
+                ):
                     source_id, target_id = target_id, source_id
                 props = {
                     "source_arxiv_id": source_id,
                     "target_arxiv_id": target_id,
                     "confidence": cached.confidence,
-                    "evidence_quote": cached.llm_response.get("evidence_quote", "") if cached.llm_response else "",
-                    "on_dimension": cached.llm_response.get("dimension", "") if cached.llm_response else "",
+                    "evidence_quote": cached.llm_response.get("evidence_quote", "")
+                    if cached.llm_response
+                    else "",
+                    "on_dimension": cached.llm_response.get("dimension", "")
+                    if cached.llm_response
+                    else "",
                 }
                 cypher, params = _build_cypher(cached.relationship_type, props)
                 await _neo4j_write(cypher, params)
@@ -213,7 +395,9 @@ async def _process_pair(
     )
 
     async with semaphore:
-        raw_response = await _call_llm_with_retry(_SYSTEM_PROMPT, user_prompt, pair_label)
+        raw_response = await _call_llm_with_retry(
+            _SYSTEM_PROMPT, user_prompt, pair_label
+        )
 
     if not raw_response:
         return 0
@@ -228,7 +412,7 @@ async def _process_pair(
                 llm_response=raw_response.model_dump(),
                 confidence=raw_response.confidence,
                 relationship_type=raw_response.relationship_type,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
         )
         await session.commit()
@@ -287,20 +471,8 @@ async def run_synthesis(job_id: str, paper_ids: list[str]) -> int:
         raise PipelineAgentError(str(exc)) from exc
 
 
-async def _set_job_failed(job_id: str, error_message: str):
-    session_factory = _get_session_maker()
-    async with session_factory() as session:
-        await session.execute(
-            update(PipelineJobs)
-            .where(PipelineJobs.id == job_id)
-            .values(status="failed", error_message=error_message)
-        )
-        await session.commit()
-
-
 async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
-    s = _settings()
-    session_factory = _get_session_maker()
+    session_factory = _session_factory
 
     async with session_factory() as session:
         await session.execute(
@@ -344,17 +516,28 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
         candidate_pairs = list(dict.fromkeys(candidate_pairs))
 
         paper_result = await session.execute(
-            select(PapersCache).where(
-                PapersCache.id.in_(paper_ids_with_emb)
-            )
+            select(PapersCache).where(PapersCache.id.in_(paper_ids_with_emb))
         )
         papers = {str(p.id): p for p in paper_result.scalars().all()}
 
     semaphore = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 
+    # Batch pairs into groups of 3 for fewer LLM calls
+    batch_size = 3
+    batches = [
+        candidate_pairs[i : i + batch_size]
+        for i in range(0, len(candidate_pairs), batch_size)
+    ]
+
     tasks = [
-        _process_pair(pid_a, pid_b, papers, session_factory, s.CONFIDENCE_THRESHOLD, semaphore)
-        for pid_a, pid_b in candidate_pairs
+        _process_batch(
+            batch,
+            papers,
+            session_factory,
+            settings.CONFIDENCE_THRESHOLD,
+            semaphore,
+        )
+        for batch in batches
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -363,7 +546,7 @@ async def _run_synthesis_inner(job_id: str, paper_ids: list[str]) -> int:
         if isinstance(r, DatabaseError):
             raise r
         elif isinstance(r, Exception):
-            logger.warning("Pair processing failed: %s", r)
+            logger.warning("Batch processing failed: %s", r)
         elif isinstance(r, int):
             rel_count += r
 

@@ -1,23 +1,25 @@
 """Ingestion agent — fetches papers from arXiv, Semantic Scholar, GitHub, and NewsAPI, writes to papers_cache."""
 
 import datetime as _dt
+import json
 import logging
+import re
 import xml.etree.ElementTree as ET
 
 import httpx
+from sqlalchemy import select
 
-from agents import ExternalAPIError, PipelineAgentError
+from agents.exceptions import PipelineAgentError, _set_job_failed
+from config import settings
+from db.models import PapersCache, PipelineJobs
+from db.neo4j_client import execute_query
+from dependencies import _session_factory
 from utils.backoff import retry
 from utils.rate_limiter import default_limiter as _arxiv_limiter
 
 logger = logging.getLogger(__name__)
 
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
-
-
-def _settings():
-    from config import settings
-    return settings
 
 
 # ── arXiv ────────────────────────────────────────────────────────────────────
@@ -90,53 +92,59 @@ async def _fetch_arxiv(client: httpx.AsyncClient, query: str, year_from: int, ye
 # ── Semantic Scholar ─────────────────────────────────────────────────────────
 
 async def _enrich_semantic_scholar(client: httpx.AsyncClient, papers: list[dict]) -> list[dict]:
-    import re as _re
-    import asyncio
-    s = _settings()
-    if not s.SEMANTIC_SCHOLAR_API_KEY:
+    if not settings.SEMANTIC_SCHOLAR_API_KEY:
         return papers
 
-    headers = {"x-api-key": s.SEMANTIC_SCHOLAR_API_KEY}
-    enriched = []
-    for paper in papers:
-        arxiv_id = paper.get("arxiv_id")
-        if not arxiv_id:
-            enriched.append(paper)
-            continue
-        # Strip version suffix (e.g. "2002.00741v1" → "2002.00741")
-        clean_id = _re.sub(r"v\d+$", "", arxiv_id)
+    # Collect arXiv IDs, strip version suffixes
+    arxiv_ids: list[tuple[int, str]] = []
+    for i, paper in enumerate(papers):
+        raw = paper.get("arxiv_id")
+        if raw:
+            clean = re.sub(r"v\d+$", "", raw)
+            arxiv_ids.append((i, clean))
+
+    if not arxiv_ids:
+        return papers
+
+    headers = {"x-api-key": settings.SEMANTIC_SCHOLAR_API_KEY}
+    batch = [f"ArXiv:{clean}" for _, clean in arxiv_ids]
+
+    import asyncio
+    for attempt in range(2):
         try:
-            resp = await client.get(
-                f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{clean_id}",
+            resp = await client.post(
+                "https://api.semanticscholar.org/graph/v1/paper/batch",
                 params={"fields": "citationCount,authors,externalIds"},
+                json={"ids": batch},
                 headers=headers,
-                timeout=15,
+                timeout=30,
             )
-            if resp.status_code == 429:
-                logger.warning("Semantic Scholar 429 for %s, waiting 1s", clean_id)
+            if resp.status_code == 429 and attempt == 0:
+                logger.warning("Semantic Scholar 429, retrying after 1s")
                 await asyncio.sleep(1)
-                resp = await client.get(
-                    f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{clean_id}",
-                    params={"fields": "citationCount,authors,externalIds"},
-                    headers=headers,
-                    timeout=15,
-                )
+                continue
             if resp.status_code == 200:
-                data = resp.json()
-                paper["citation_count"] = data.get("citationCount", 0) or paper.get("citation_count", 0)
+                results = resp.json()
+                for (orig_idx, _), result in zip(arxiv_ids, results):
+                    if result and (cc := result.get("citationCount")) is not None:
+                        papers[orig_idx]["citation_count"] = cc
             else:
-                logger.warning("Semantic Scholar %d for %s", resp.status_code, clean_id)
+                logger.warning("Semantic Scholar batch returned %d", resp.status_code)
+            break
         except Exception as exc:
-            logger.warning("Semantic Scholar error for %s: %s", clean_id, exc)
-        enriched.append(paper)
-    return enriched
+            if attempt == 0:
+                logger.warning("Semantic Scholar error, retrying: %s", exc)
+                await asyncio.sleep(1)
+                continue
+            logger.warning("Semantic Scholar batch error: %s", exc)
+
+    return papers
 
 
 # ── GitHub ───────────────────────────────────────────────────────────────────
 
 async def _fetch_github(client: httpx.AsyncClient, query: str) -> list[dict]:
-    s = _settings()
-    headers = {"Authorization": f"Bearer {s.GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    headers = {"Authorization": f"Bearer {settings.GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     try:
         resp = await client.get(
             "https://api.github.com/search/repositories",
@@ -186,20 +194,19 @@ async def _fetch_github(client: httpx.AsyncClient, query: str) -> list[dict]:
 # ── NewsAPI ──────────────────────────────────────────────────────────────────
 
 async def _fetch_newsapi(client: httpx.AsyncClient, query: str, year_from: int) -> list[dict]:
-    s = _settings()
-    if not s.NEWS_API_KEY:
+    if not settings.NEWS_API_KEY:
         return []
     try:
         resp = await client.get(
-            "https://newsapi.org/v2/everything",
-            params={
-                "q": query,
-                "from": f"{year_from}-01-01",
-                "sortBy": "relevancy",
-                "apiKey": s.NEWS_API_KEY,
-            },
-            timeout=15,
-        )
+                "https://newsapi.org/v2/everything",
+                params={
+                    "q": query,
+                    "from": f"{year_from}-01-01",
+                    "sortBy": "relevancy",
+                    "apiKey": settings.NEWS_API_KEY,
+                },
+                timeout=15,
+            )
         resp.raise_for_status()
         articles = resp.json().get("articles", [])
     except Exception as exc:
@@ -223,14 +230,8 @@ async def _fetch_newsapi(client: httpx.AsyncClient, query: str, year_from: int) 
 # ── DB Write ─────────────────────────────────────────────────────────────────
 
 async def _write_papers(papers: list[dict]) -> list[str]:
-    import json as _json
-    from db.models import PapersCache
-    from db.postgres_client import _get_session_maker
-    from sqlalchemy import select
-
-    session_factory = _get_session_maker()
     ids = []
-    async with session_factory() as session:
+    async with _session_factory() as session:
         for paper in papers:
             arxiv_id = paper.get("arxiv_id")
             title = paper.get("title", "")
@@ -255,7 +256,7 @@ async def _write_papers(papers: list[dict]) -> list[str]:
 
             authors = paper.get("authors")
             if authors and not isinstance(authors, str):
-                authors = _json.dumps(authors)
+                authors = json.dumps(authors)
 
             new_paper = PapersCache(
                 arxiv_id=arxiv_id,
@@ -276,77 +277,57 @@ async def _write_papers(papers: list[dict]) -> list[str]:
 
 
 async def _write_papers_to_neo4j(papers: list[dict]):
-    """Write ingested papers to Neo4j as Paper nodes (MERGE to avoid duplicates)."""
-    try:
-        from db.neo4j_client import execute_query
-    except Exception as exc:
-        logger.warning("Neo4j not available, skipping Neo4j write: %s", exc)
-        return
-
+    """Write ingested papers to Neo4j using a single batch UNWIND."""
+    batch = []
     for paper in papers:
         arxiv_id = paper.get("arxiv_id")
         if not arxiv_id:
             continue
-        try:
-            authors = paper.get("authors", [])
-            if isinstance(authors, list):
-                author_names = [a.get("name", "") if isinstance(a, dict) else str(a) for a in authors]
-            else:
-                author_names = []
+        authors = paper.get("authors", [])
+        if isinstance(authors, list):
+            author_names = [a.get("name", "") if isinstance(a, dict) else str(a) for a in authors]
+        else:
+            author_names = []
+        batch.append({
+            "arxiv_id": arxiv_id,
+            "title": paper.get("title", ""),
+            "abstract": paper.get("abstract", ""),
+            "authors": author_names,
+            "publish_date": paper.get("publish_date") or "2024-01-01",
+            "citation_count": paper.get("citation_count", 0),
+            "source": paper.get("source", "unknown"),
+            "url": paper.get("url", ""),
+        })
 
-            await execute_query(
-                "MERGE (p:Paper {arxiv_id: $arxiv_id}) "
-                "SET p.title = $title, "
-                "    p.abstract = $abstract, "
-                "    p.authors = $authors, "
-                "    p.publish_date = date($publish_date), "
-                "    p.citation_count = $citation_count, "
-                "    p.source = $source, "
-                "    p.url = $url",
-                {
-                    "arxiv_id": arxiv_id,
-                    "title": paper.get("title", ""),
-                    "abstract": paper.get("abstract", ""),
-                    "authors": author_names,
-                    "publish_date": paper.get("publish_date") or "2024-01-01",
-                    "citation_count": paper.get("citation_count", 0),
-                    "source": paper.get("source", "unknown"),
-                    "url": paper.get("url", ""),
-                },
-            )
-        except Exception as exc:
-            logger.warning("Failed to write paper %s to Neo4j: %s", arxiv_id, exc)
+    if not batch:
+        return
+
+    try:
+        await execute_query(
+            "UNWIND $papers AS p "
+            "MERGE (n:Paper {arxiv_id: p.arxiv_id}) "
+            "SET n.title = p.title, "
+            "    n.abstract = p.abstract, "
+            "    n.authors = p.authors, "
+            "    n.publish_date = date(p.publish_date), "
+            "    n.citation_count = p.citation_count, "
+            "    n.source = p.source, "
+            "    n.url = p.url",
+            {"papers": batch},
+        )
+    except Exception as exc:
+        logger.warning("Failed to batch-write %d papers to Neo4j: %s", len(batch), exc)
 
 
 async def _update_job(job_id: str, status: str, papers_found: int):
-    from db.models import PipelineJobs
-    from db.postgres_client import _get_session_maker
-    from sqlalchemy import select
-
-    session_factory = _get_session_maker()
-    async with session_factory() as session:
-        result = await session.execute(select(PipelineJobs).where(PipelineJobs.id == job_id))
-        job = result.scalar()
-        if job:
-            job.status = status
-            job.papers_found = papers_found
-            await session.commit()
-
-
-async def _set_job_failed(job_id: str, error_message: str):
-    from db.models import PipelineJobs
-    from db.postgres_client import _get_session_maker
-    from sqlalchemy import select
-
-    session_factory = _get_session_maker()
-    async with session_factory() as session:
-        result = await session.execute(select(PipelineJobs).where(PipelineJobs.id == job_id))
-        job = result.scalar()
-        if job:
-            job.status = "failed"
-            job.error_message = error_message
-            await session.commit()
-
+    from sqlalchemy import update
+    async with _session_factory() as session:
+        await session.execute(
+            update(PipelineJobs)
+            .where(PipelineJobs.id == job_id)
+            .values(status=status, papers_found=papers_found)
+        )
+        await session.commit()
 
 # ── Main Entry Point ─────────────────────────────────────────────────────────
 

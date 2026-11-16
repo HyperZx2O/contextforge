@@ -3,26 +3,50 @@ import logging
 import re
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from neo4j import AsyncSession
 from neo4j.exceptions import Neo4jError
 
 from agents import call_llm, call_llm_answer
-from api.deps import require_api_key
 from api.schemas import (
     EdgeProperties,
     GraphEdge,
     NLQueryRequest,
     NLQueryResponse,
 )
-from dependencies import get_neo4j
+from dependencies import get_neo4j, get_neo4j_driver, limiter
 
 router = APIRouter(prefix="/query", tags=["query"])
 log = logging.getLogger(__name__)
 
-_WRITE_KEYWORDS = re.compile(
-    r"\b(CREATE|MERGE|DELETE|SET|REMOVE|DROP)\b", re.IGNORECASE
+# Allowlist of read-only Cypher keywords. Anything not in this set is rejected.
+_ALLOWED_KEYWORDS = re.compile(
+    r"\b(MATCH|OPTIONAL|WHERE|RETURN|WITH|ORDER|BY|LIMIT|SKIP|UNWIND|AS|AND|OR|NOT|IN|CONTAINS|STARTS|ENDS|IS|NULL|DISTINCT|COUNT|SUM|AVG|MIN|MAX|COLLECT|CASE|WHEN|THEN|ELSE|END|EXISTS|SIZE|LENGTH|TYPE|LABELS|KEYS|PROPERTIES|NODES|RELATIONSHIPS|PATH|REDUCE|FILTER|EXTRACT|ALL|ANY|NONE|SINGLE)\b",
+    re.IGNORECASE,
 )
+
+# Blocklist of dangerous operations (defense in depth).
+_WRITE_KEYWORDS = re.compile(
+    r"\b(CREATE|MERGE|DELETE|SET|REMOVE|DROP|LOAD\s+CSV|FOREACH|PROFILE|EXPLAIN|GRANT|REVOKE|ALTER|START|CALL\s+dbms|CALL\s+db\.index)\b",
+    re.IGNORECASE,
+)
+
+_MAX_LIMIT = 100
+
+
+def _enforce_limit(cypher: str) -> str:
+    """Ensure the Cypher query has a LIMIT <= 100. Append if missing."""
+    limit_match = re.search(r"\bLIMIT\s+(\d+)", cypher, re.IGNORECASE)
+    if limit_match:
+        limit_val = int(limit_match.group(1))
+        if limit_val > _MAX_LIMIT:
+            cypher = re.sub(
+                r"\bLIMIT\s+\d+", f"LIMIT {_MAX_LIMIT}", cypher, flags=re.IGNORECASE
+            )
+    else:
+        cypher = cypher.rstrip().rstrip(";") + f" LIMIT {_MAX_LIMIT}"
+    return cypher
+
 
 _SYSTEM_PROMPT = """You are a Neo4j Cypher query generator. Convert the user's natural language question about a research knowledge graph into a safe, read-only Cypher query.
 
@@ -43,22 +67,19 @@ Rules:
 
 
 @router.post("/natural-language", response_model=NLQueryResponse)
+@limiter.limit("10/minute")
 async def natural_language_query(
+    request: Request,
     req: NLQueryRequest,
-    _auth: None = Depends(require_api_key),
-    session: AsyncSession = Depends(get_neo4j),
 ):
     start = time.monotonic()
 
+    driver = get_neo4j_driver()
+
+    # Context node validation (read-only)
     if req.context_node_id:
         try:
-            # Try element_id first, then fallback to arxiv_id
-            check = await session.run(
-                "MATCH (n) WHERE element_id(n) = $id RETURN n LIMIT 1",
-                id=req.context_node_id,
-            )
-            records = [rec async for rec in check]
-            if not records:
+            async with driver.session(default_access_mode="r") as session:
                 check = await session.run(
                     "MATCH (n {arxiv_id: $id}) RETURN n LIMIT 1",
                     id=req.context_node_id,
@@ -94,6 +115,7 @@ async def natural_language_query(
 
     cypher = llm_result.get("cypher", "")
 
+    # Defense in depth: blocklist check
     if _WRITE_KEYWORDS.search(cypher):
         raise HTTPException(
             status_code=400,
@@ -103,9 +125,30 @@ async def natural_language_query(
             },
         )
 
+    # Allowlist check: every keyword must be in the allowed set
+    found_keywords = set(_ALLOWED_KEYWORDS.findall(cypher))
+    # Extract all words that look like Cypher keywords (uppercase)
+    all_words = set(re.findall(r"\b[A-Z]{2,}\b", cypher))
+    disallowed = (
+        all_words - found_keywords - {"A", "I", "OR", "AND", "NOT", "IN", "IS", "AS"}
+    )
+    if disallowed:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "UNSAFE_QUERY",
+                "message": f"Query contains disallowed keywords: {', '.join(sorted(disallowed))}",
+            },
+        )
+
+    # Enforce LIMIT server-side
+    cypher = _enforce_limit(cypher)
+
+    # Execute LLM-generated Cypher in a read-only session
     try:
-        result = await session.run(cypher)
-        records = [dict(rec) async for rec in result]
+        async with driver.session(default_access_mode="r") as session:
+            result = await session.run(cypher)
+            records = [dict(rec) async for rec in result]
     except Neo4jError as e:
         log.error("Neo4j error executing query: %s", e)
         raise HTTPException(

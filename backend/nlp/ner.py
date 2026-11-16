@@ -1,6 +1,6 @@
-"""NER wrapper — extracts entities from scientific text.
+"""NER wrapper - extracts entities from scientific text.
 
-Tries SciSpaCy (en_core_sci_md) first, falls back to standard spaCy (en_core_web_sm).
+Tries SciSpaCy (SciBERT-based) first, falls back to smaller models.
 """
 
 import logging
@@ -14,14 +14,22 @@ def _get_nlp():
     global _nlp
     if _nlp is None:
         import spacy
-        for model in ["en_core_sci_md", "en_core_web_sm"]:
+
+        for model in [
+            "en_core_sci_scibert",
+            "en_core_sci_md",
+            "en_core_sci_sm",
+            "en_core_web_sm",
+        ]:
             try:
                 _nlp = spacy.load(model)
                 logger.info("NER model loaded: %s", model)
                 return _nlp
             except OSError:
                 continue
-        raise OSError("No spaCy model available. Install en_core_sci_md or en_core_web_sm.")
+        raise OSError(
+            "No spaCy model available. Install en_core_sci_scibert or en_core_web_sm."
+        )
     return _nlp
 
 
@@ -34,8 +42,8 @@ def extract_entities(text: str) -> list[dict]:
     doc = _get_nlp()(text)
     entities = []
     for ent in doc.ents:
-        if ent.label_ in ("ENTITY", "PRODUCT", "TECHNOLOGY"):
+        if ent.label_ in ("ENTITY", "PRODUCT", "TECHNOLOGY", "METHOD"):
             entities.append({"entity_type": "Method", "name": ent.text})
-        elif ent.label_ in ("ORG", "NORP"):
+        elif ent.label_ in ("ORG", "NORP", "DATASET"):
             entities.append({"entity_type": "Dataset", "name": ent.text})
     return entities

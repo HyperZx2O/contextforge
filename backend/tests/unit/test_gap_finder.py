@@ -92,7 +92,7 @@ async def test_find_low_density_gaps():
 @pytest.mark.asyncio
 async def test_gap_finder_writes_gap_node():
     with (
-        patch("agents.gap_finder._get_session_maker") as mock_sm,
+        patch("agents.gap_finder._session_factory") as mock_sm,
         patch("agents.gap_finder.execute_query", new_callable=AsyncMock) as mock_eq,
         patch("agents.gap_finder.call_llm", new_callable=AsyncMock) as mock_llm,
     ):
@@ -116,7 +116,7 @@ async def test_gap_finder_writes_gap_node():
             return [{"g": {}}]
 
         mock_eq.side_effect = eq_side_effect
-        mock_sm.return_value = lambda: _fake_session_factory()
+        mock_sm.side_effect = _fake_session_factory
 
         from agents.gap_finder import run_gap_finder
 
@@ -136,13 +136,13 @@ async def test_gap_finder_writes_gap_node():
 @pytest.mark.asyncio
 async def test_gap_finder_status_done():
     with (
-        patch("agents.gap_finder._get_session_maker") as mock_sm,
+        patch("agents.gap_finder._session_factory") as mock_sm,
         patch("agents.gap_finder.execute_query", new_callable=AsyncMock) as mock_eq,
         patch("agents.gap_finder.call_llm", new_callable=AsyncMock) as mock_llm,
-        patch("agents.gap_finder._settings") as mock_settings,
+        patch("agents.gap_finder.settings") as mock_settings,
     ):
         mock_llm.return_value = _VALID_GAP_RESPONSE
-        mock_settings.return_value = MagicMock(GAP_TEMPORAL_YEARS=5)
+        mock_settings.GAP_TEMPORAL_YEARS = 5
 
         call_count = 0
 
@@ -165,7 +165,7 @@ async def test_gap_finder_status_done():
         async def _fixed_factory():
             yield session
 
-        mock_sm.return_value = _fixed_factory
+        mock_sm.side_effect = _fixed_factory
 
         from agents.gap_finder import run_gap_finder
 
@@ -179,7 +179,7 @@ async def test_gap_finder_status_done():
 @pytest.mark.asyncio
 async def test_gap_finder_llm_failure_skips():
     with (
-        patch("agents.gap_finder._get_session_maker") as mock_sm,
+        patch("agents.gap_finder._session_factory") as mock_sm,
         patch("agents.gap_finder.execute_query", new_callable=AsyncMock) as mock_eq,
         patch("agents.gap_finder.call_llm", new_callable=AsyncMock) as mock_llm,
     ):
@@ -197,7 +197,7 @@ async def test_gap_finder_llm_failure_skips():
             return []
 
         mock_eq.side_effect = eq_side_effect
-        mock_sm.return_value = lambda: _fake_session_factory()
+        mock_sm.side_effect = _fake_session_factory
 
         from agents.gap_finder import run_gap_finder
 
@@ -210,12 +210,12 @@ async def test_gap_finder_llm_failure_skips():
 @pytest.mark.asyncio
 async def test_gap_finder_empty_graph():
     with (
-        patch("agents.gap_finder._get_session_maker") as mock_sm,
+        patch("agents.gap_finder._session_factory") as mock_sm,
         patch("agents.gap_finder.execute_query", new_callable=AsyncMock) as mock_eq,
         patch("agents.gap_finder.call_llm", new_callable=AsyncMock) as mock_llm,
     ):
         mock_eq.return_value = []
-        mock_sm.return_value = lambda: _fake_session_factory()
+        mock_sm.side_effect = _fake_session_factory
 
         from agents.gap_finder import run_gap_finder
 

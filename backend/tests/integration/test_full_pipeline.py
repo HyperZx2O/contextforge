@@ -53,7 +53,7 @@ async def test_full_pipeline():
     from agents.extractor import run_extraction
     from agents.synthesis import run_synthesis
     from agents.gap_finder import run_gap_finder
-    from db.postgres_client import _get_session_maker
+    from dependencies import _session_factory
     from db.models import PipelineJobs
 
     async def mock_get(url, params=None, timeout=None):
@@ -68,7 +68,7 @@ async def test_full_pipeline():
     mock_http.__aenter__ = AsyncMock(return_value=mock_http)
     mock_http.__aexit__ = AsyncMock(return_value=None)
 
-    session_factory = _get_session_maker()
+    session_factory = _session_factory
     job_id = str(uuid.uuid4())
 
     async with session_factory() as session:
